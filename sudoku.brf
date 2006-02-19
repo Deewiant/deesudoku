@@ -1,0 +1,5 @@
+sudoku
+-O
+-inline
+-release
+-odobj

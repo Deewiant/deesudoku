@@ -1,0 +1,10 @@
+     /------------------------------\
+-----|   DeewiantSudoku ChangeLog   |-------------------------------------------
+     \------------------------------/
+
+--------------------------------------------------------------------------------
+ 1.0.0        2006-02-14
+--------------------------------------------------------------------------------
+ - First numbered version!
+ - Capabilities should now equal those of http://sudokusolver.co.uk/ - but only
+   in terms of "logic": no equivalent to its "Ariadne's Thread" bruteforcer.
