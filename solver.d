@@ -3,20 +3,22 @@ module sudoku.solver;
 private import
 	std.cstream,
 	std.math,
+	std.perf,
 	std.string,
-	sudoku.defs;
-
-int prettyPrintInterval;
-bool done;
+	sudoku.defs,
+	sudoku.output;
 
 void solve() {
-	charWidth = cast(int)ceil(log9(dim));
-
 	bool changed;
+	ulong iterations;
+	long time; // no see
 
-	if (someStats)
+	TickCounter timer = new TickCounter();
+	if (someStats) {
 		foreach (char[] s; statistics.keys)
 			statistics.remove(s);
+		timer.start();
+	}
 
 	updateCandidates();
 
@@ -37,19 +39,26 @@ void solve() {
 			break;
 		}
 
+		if (someStats)
+			++iterations;
+
 		foreach (bool function() method; methods)
 			if (changed = method(), changed)
 				break;
 
-		if (someStats)
-			++iterations;
+		if (solved()) {
+			done = true;
+			break;
+		}
 
-		if (explain || stats)
+		if (!noGrid || explain || stats)
 			dout.flush();
 	} while (changed);
 
-	if (solved())
-		done = true;
+	if (someStats) {
+		timer.stop();
+		time = timer.milliseconds();
+	}
 
 	// if showGrid is on, it was already printed
 	if (!showGrid && !noGrid)
@@ -59,28 +68,33 @@ void solve() {
 		foreach (char[] s, ulong n; statistics)
 			totalStatistics[s] += n;
 		totalIterations += iterations;
+		totalTime       += time;
 
 		if (done)
 			++completed;
 	}
 
 	if (stats)
-		printStats(statistics, iterations);
+		printStats(statistics, iterations, time);
 }
 
 private:
 
 const bool function()[] methods;
-// statistics mostly use the names at http://www.krazydad.com/blog/2005/09/29/an-index-of-sudoku-strategies/
+// statistics mostly use the names at http://www.simes.clara.co.uk/programs/sudokutechniques.htm
 ulong[char[]] statistics;
-ulong iterations;
 
 static this() {
+	// ordered according to their likelihood of being useful
+	// this increases speed (reduces iterations) somewhat
+
+	// ichthyology implemented before XY-wing but the latter is more common
 	methods ~= &expandSingleCandidates;
 	methods ~= &assignUniques;
 	methods ~= &checkConstraints;
 	methods ~= &nakedSubset;
 	methods ~= &hiddenSubset;
+	methods ~= &xyWing;
 	methods ~= &ichthyology;
 }
 
@@ -133,7 +147,6 @@ bool assignUniques() {
 				Cell c = row[position[i]];
 				c.val = i;
 				c.candidates.length = 0;
-				changed = true;
 
 				if (explain) {
 					dout.writefln("Cell %s is the only one in row %s to have the candidate %d.",
@@ -146,6 +159,8 @@ bool assignUniques() {
 				updateCandidatesAffectedBy(c);
 				if (someStats)
 					++statistics[name];
+
+				return true;
 			}
 		}
 	}
@@ -166,7 +181,6 @@ bool assignUniques() {
 				Cell c = col[position[i]];
 				c.val = i;
 				c.candidates.length = 0;
-				changed = true;
 
 				if (explain) {
 					dout.writefln("Cell %s is the only one in column %d to have the candidate %d.",
@@ -179,6 +193,8 @@ bool assignUniques() {
 				updateCandidatesAffectedBy(c);
 				if (someStats)
 					++statistics[name];
+
+				changed = true;
 			}
 		}
 	}
@@ -212,6 +228,8 @@ bool assignUniques() {
 				updateCandidatesAffectedBy(c);
 				if (someStats)
 					++statistics[name];
+
+				changed = true;
 			}
 		}
 	}
@@ -224,9 +242,8 @@ bool assignUniques() {
 // and the same the other way around, check each box for row/column
 bool checkConstraints() {
 	const char[] name = "House interactions";
-	bool changed;
 
-	void rowColFunc(int r, Cell[] row, char[] str, bool col) {
+	bool rowColFunc(int r, Cell[] row, char[] str, bool col) {
 		int[int] boxOf; // key is number value, value is -1 for more than one box or the box number
 		int[int] nFound;
 
@@ -255,28 +272,26 @@ bool checkConstraints() {
 						            value,
 						            str
 						);
-						dout.writefln("eliminated %d candidates for %d.", removed, value);
+						dout.writefln("eliminated %s for %d.", nCandidates(removed), value);
 					}
-					changed = true;
+
 					if (someStats)
 						++statistics[name];
+
+					return true;
 				}
 			}
 		}
+
+		return false;
 	}
 
-	foreach (int r, Cell[] row; rows) {
-		rowColFunc(r, row, format("row %s", ROWCHAR[r]), false);
-
-		if (changed)
-			return changed;
-	}
-	foreach (int c, Cell[] col; cols) {
-		rowColFunc(c, col, format("column %d", c + 1), true);
-
-		if (changed)
-			return changed;
-	}
+	foreach (int r, Cell[] row; rows)
+		if (rowColFunc(r, row, format("row %s", ROWCHAR[r]), false))
+			return true;
+	foreach (int c, Cell[] col; cols)
+		if (rowColFunc(c, col, format("column %d", c + 1), true))
+			return true;
 
 	foreach (int b, Cell[] box; boxes) {
 		int[int] colOf, rowOf;
@@ -304,11 +319,13 @@ bool checkConstraints() {
 					if (explain) {
 						dout.writef("Column %d must contain %d in box at %s; ",
 						            colOf[value] + 1, value, boxes[b][0].toString);
-						dout.writefln("eliminated %d candidates for %d.", removed, value);
+						dout.writefln("eliminated %s for %d.", nCandidates(removed), value);
 					}
-					changed = true;
+
 					if (someStats)
 						++statistics[name];
+
+					return true;
 				}
 			}
 		}
@@ -335,18 +352,19 @@ bool checkConstraints() {
 					if (explain) {
 						dout.writef("Row %s must contain %d in box at %s; ",
 						            ROWCHAR[rowOf[value]], value, boxes[b][0].toString);
-						dout.writefln("eliminated %d candidates for %d.", removed, value);
+						dout.writefln("eliminated %s for %d.", nCandidates(removed), value);
 					}
-					changed = true;
+
+					if (someStats)
+						++statistics[name];
+
+					return true;
 				}
 			}
 		}
-
-		if (changed)
-			return changed;
 	}
 
-	return changed;
+	return false;
 }
 
 // if n cells in the same row/column/block have altogether only n different candidates,
@@ -384,7 +402,6 @@ bool nakedSubset() {
 							break;
 						}
 					}
-
 				} else {
 					if (cells.length == candNumber) {
 						int removed;
@@ -413,8 +430,9 @@ bool nakedSubset() {
 								            candList[0..$-2]
 								);
 
-								dout.writefln("eliminated %d such candidates in %s.", removed, str);
+								dout.writefln("eliminated %s in %s.", nCandidates(removed, "such"), str);
 							}
+
 							changed = true;
 
 							if (someStats) switch (candNumber) {
@@ -456,11 +474,14 @@ bool nakedSubset() {
 	return changed;
 }
 
+// http://www.simes.clara.co.uk/programs/sudokutechnique9.htm puts it concisely:
+// If there are N cells with N candidates between them that don't appear
+// elsewhere in the same row, column or block, then any other candidates
+// for those cells can be eliminated.
 bool hiddenSubset() {
 	const char[] name = "Hidden subsets";
-	bool changed;
 
-	void generalFunction(Cell[] area) {
+	bool generalFunction(Cell[] area) {
 		// http://www.setbb.com/phpbb/viewtopic.php?t=273&mforum=sudoku
 		// as to why (dim-1)/2
 		for (int n = 2; n <= (dim-1)/2; ++n) {
@@ -524,7 +545,6 @@ bool hiddenSubset() {
 
 						dout.writefln("eliminated %d other candidates from them.", removed);
 					}
-					changed = true;
 
 					if (someStats) switch (n) {
 						case 2:	++statistics["Hidden pairs"];       break;
@@ -532,27 +552,31 @@ bool hiddenSubset() {
 						case 4: ++statistics["Hidden quadruplets"]; break;
 						default: ++statistics[format("%s (n=%d)", name, n)];
 					}
+
+					return true;
 				}
 
 				continueOuter:;
 			}
 		}
+
+		return false;
 	}
 
 	foreach (inout Cell[] row; rows) {
-		generalFunction(row);
-		if (changed) return changed;
+		if (generalFunction(row))
+			return true;
 	}
 	foreach (inout Cell[] col; cols) {
-		generalFunction(col);
-		if (changed) return changed;
+		if (generalFunction(col))
+			return true;
 	}
 	foreach (inout Cell[] box; boxes) {
-		generalFunction(box);
-		if (changed) return changed;
+		if (generalFunction(box))
+			return true;
 	}
 
-	return changed;
+	return false;
 }
 
 // most understandable general definition I found:
@@ -563,7 +587,6 @@ Look for N columns (2 for X-wing, 3 for the Swordfish, 4 for a Jellyfish, 5 for 
 // cheers to MadOverlord there for getting the idea of a 9x9 fish being called a Cthulhu
 bool ichthyology() {
 	const char[] name = "Ichthyology";
-	bool changed;
 
 	// a fish can be at most of size dim/2
 	// since fish of n=a in rows is a fish of n=dim-a in cols
@@ -650,12 +673,10 @@ bool ichthyology() {
 						);
 
 						dout.writefln(
-							"eliminated %d candidates for %d in rows %s.",
-							removed, val, rowList[0..$-2]
+							"eliminated %s for %d in rows %s.",
+							nCandidates(removed), val, rowList[0..$-2]
 						);
 					}
-
-					changed = true;
 
 					if (someStats) {
 						if (n == 2 || n == 5 || n == 9)
@@ -665,12 +686,11 @@ bool ichthyology() {
 						else
 							++statistics[format("%s (n=%d)", name, n)];
 					}
+
+					return true;
 				}
 			}
 		}
-
-		if (changed)
-			return changed;
 
 		// columns now...
 		for (int val = 1; val <= dim; ++val) {
@@ -746,12 +766,10 @@ bool ichthyology() {
 						);
 
 						dout.writefln(
-							"eliminated %d candidates for %d in columns %s.",
-							removed, val, colList[0..$-2]
+							"eliminated %s for %d in columns %s.",
+							nCandidates(removed), val, colList[0..$-2]
 						);
 					}
-
-					changed = true;
 
 					if (someStats) {
 						if (n == 2 || n == 5 || n == 9)
@@ -761,49 +779,188 @@ bool ichthyology() {
 						else
 							++statistics[format("%s (n=%d)", name, n)];
 					}
+
+					return true;
 				}
 			}
 		}
-
-		if (changed)
-			return changed;
 	}
 
-	return changed;
+	return false;
+}
+
+// Find a cell with two candidates, X and Y.
+// Find two buddies of that cell with candidates X and Z, Y and Z.
+// Then can remove Z from the candidates of all cells that are buddies with both of the two buddies.
+bool xyWing() {
+	const char[] name = "XY-wing";
+
+	foreach (Cell c; grid) {
+		if (c.candidates.length != 2)
+			continue;
+
+		int X = c.candidates[0],
+		    Y = c.candidates[1];
+
+		int[] Z;
+		Cell[][] goodGroups;
+		goodGroups.length = dim;
+
+		Cell[] cBuddies = buddies(c);
+
+		// find all buddies of c with candidates X and Z.
+		// add each one to its own Cell[] in goodGroups.
+		// then loop through each Z
+		// and find all buddies of c with candidates Y and that Z, and each to the corresponding goodGroup.
+		int i;
+		foreach (Cell friend; cBuddies) {
+			if (friend.candidates.length != 2)
+				continue;
+
+			// one of the candidates is also in c (i.e. is X or Y), other is not
+			// being sneaky here... if the Z is negative, the other candidate was Y, else it was X
+			if (friend.candidates[0] == X && friend.candidates[1] != Y) {
+				Z ~= friend.candidates[1];
+				goodGroups[i++] ~= friend;
+			} else if (friend.candidates[0] == Y && friend.candidates[1] != X) {
+				Z ~= -friend.candidates[1];
+				goodGroups[i++] ~= friend;
+			} else if (friend.candidates[1] == X && friend.candidates[0] != Y) {
+				Z ~= friend.candidates[0];
+				goodGroups[i++] ~= friend;
+			} else if (friend.candidates[1] == Y && friend.candidates[0] != X) {
+				Z ~= -friend.candidates[0];
+				goodGroups[i++] ~= friend;
+			}
+		}
+		goodGroups.length = i;
+		foreach (int i, int z; Z) {
+			bool otherIsX = true;
+			if (z < 0) {
+				z = -z;
+				otherIsX = false;
+			}
+			foreach (Cell friend; cBuddies) {
+				if (friend.candidates.length != 2 || !friend.candidates.contains(z))
+					continue;
+
+				if (otherIsX && friend.candidates.contains(Y))
+					goodGroups[i] ~= friend;
+				else if (!otherIsX && friend.candidates.contains(X))
+					goodGroups[i] ~= friend;
+			}
+		}
+
+		foreach (int i, Cell[] goodGroup; goodGroups) {
+			if (!goodGroup.length)
+				continue;
+
+			auto p = new Parter!(Cell)(goodGroup, 2);
+			Cell[] goodPair;
+			while ((goodPair = p.next()) !is null) {
+				if (goodPair[0].candidates == goodPair[1].candidates)
+					continue;
+
+				int removed;
+
+				foreach (Cell target; buddies(goodPair[0]))
+					if (target !is c && target !is goodPair[1] && areBuddies(target, goodPair[1]))
+						removed += target.removeCandidates(Z[i]);
+
+				if (removed > 0) {
+					if (explain) {
+						dout.writef(
+							"Found an %s among %s for %d; ",
+							name,
+							format("%s, %s, %s", c, goodPair[0], goodPair[1]),
+							Z[i]
+						);
+
+						dout.writefln(
+							"eliminated %s for %d.",
+							nCandidates(removed), Z[i]
+						);
+					}
+
+					if (someStats)
+						++statistics[name ~ 's'];
+
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
+}
+
+// In XYZ-wing the XZ cell must share a box with XYZ, and eliminations are done in that box along the line between XYZ and YZ.
+bool xyzWing() {
+
+
+	return false;
 }
 
 // utility
 //////////
 
-void updateCandidates() {
+package void updateCandidates() {
 	foreach (inout Cell cell; grid)
 		updateCandidates(cell);
 }
 
-void updateCandidates(Cell cell) {
+void updateCandidates(inout Cell cell) {
 	int[] impossible;
 
 	foreach (Cell c; rows [cell.row])
-		impossible ~= c.val;
+		if (!impossible.contains(c.val))
+			impossible ~= c.val;
 	foreach (Cell c; cols [cell.col])
-		impossible ~= c.val;
+		if (!impossible.contains(c.val))
+			impossible ~= c.val;
 	foreach (Cell c; boxes[cell.box])
-		impossible ~= c.val;
+		if (!impossible.contains(c.val))
+			impossible ~= c.val;
 	cell.removeCandidates(impossible);
 }
 
 void updateCandidatesAffectedBy(Cell cell) {
-	foreach (inout Cell c; rows[cell.row])
+	foreach (inout Cell c; rows [cell.row])
 		if (cell !is c)
 			updateCandidates(c);
-
-	foreach (inout Cell c; cols[cell.col])
+	foreach (inout Cell c; cols [cell.col])
 		if (cell !is c)
 			updateCandidates(c);
-
 	foreach (inout Cell c; boxes[cell.box])
 		if (cell !is c)
 			updateCandidates(c);
+}
+
+Cell[] buddies(Cell cell) {
+	Cell[] bs;
+	bs.length = 3 * (dim - 1);
+	int i;
+
+	foreach (Cell c; rows [cell.row])
+		if (cell !is c)
+			bs[i++] = c;
+	foreach (Cell c; cols [cell.col])
+		if (cell !is c)
+			bs[i++] = c;
+	foreach (Cell c; boxes[cell.box])
+		if (cell !is c)
+			bs[i++] = c;
+
+	bs.length = i;
+	return bs;
+}
+
+bool areBuddies(Cell a, Cell[] b...) {
+	foreach (Cell c; b)
+		if (a.row != c.row && a.col != c.col && a.box != c.box)
+			return false;
+
+	return true;
 }
 
 bool valid() {
@@ -870,123 +1027,4 @@ void dancingLinks() {
 		dim * dim * dim,
 		dim * dim * 4
 	);+/
-}
-
-// output
-//////////
-
-// how many characters we want to pad/spread our numbers and chars to
-int charWidth;
-
-char[] spread(char c, int n = charWidth) {
-	char[] tmp;
-	for (int i = 0; i < n; ++i)
-		tmp ~= c;
-	return tmp;
-}
-
-void printGrid() {
-	// space out a bit
-	if (explain || stats)
-		dout.writefln();
-
-	if (ssckCompatible) {
-		foreach (int i, Cell c; grid) {
-			if (i > 0 && i % dim == 0)
-				dout.writef('+');
-
-			if (c.val == EMPTY)
-				dout.writef(spread('_'));
-			else
-				dout.writef(charWidth > 1 ? " %*d" : "%*d", charWidth, c.val);
-		}
-	} else if (terseOutput) {
-		if (charWidth > 1)
-			dout.writef("!%d!", charWidth);
-		foreach (int i, Cell c; grid) {
-			/+if (dim != 9 && i > 0 && i % dim == 0)
-				dout.writef('+');+/
-
-			if (c.val == EMPTY)
-				dout.writef(spread('.'));
-			else
-				dout.writef(charWidth > 1 ? " %*d" : "%*d", charWidth, c.val);
-		}
-	} else {
-		void horizRule() {
-			char[] tmp;
-			for (int i = 0; i < prettyPrintInterval; ++i) {
-				for (int j = 0; j < prettyPrintInterval; ++j)
-					tmp ~= spread('-', charWidth > 1 ? charWidth + 1 : charWidth);
-				tmp ~= '+';
-			}
-
-			// lose the last +
-			dout.writefln(showKey ? " +" : "", tmp[0 .. $-1]);
-		}
-
-		if (done)
-			dout.writefln("Solved!\n");
-
-		if (showKey) {
-			// the column values
-
-			// skip past the row values and the left border
-			dout.writef("  ");
-
-			for (int i = 0, j = 0; j < dim; ++i) {
-				if (i > 0 && i % prettyPrintInterval == 0)
-					// skip the vertical border
-					dout.writef(' ');
-
-				dout.writef(charWidth > 1 ? " %*d" : "%*d", charWidth, ++j);
-			}
-			dout.writefln();
-			horizRule();
-		}
-
-		foreach (int i, Cell[] row; rows) {
-			if (i > 0 && i % prettyPrintInterval == 0)
-				horizRule();
-
-			if (showKey)
-				dout.writef("%s|", ROWCHAR[i]);
-
-			foreach (int j, Cell c; row) {
-				if (j > 0 && j % prettyPrintInterval == 0)
-					dout.writef('|');
-
-				if (c.val == EMPTY)
-					dout.writef(charWidth > 1 ? " " : "", spread('.', charWidth));
-				else
-					dout.writef(charWidth > 1 ? " %*d" : "%*d", charWidth, c.val);
-
-			}
-			dout.writefln();
-		}
-	}
-
-	dout.writefln();
-}
-
-void printCandidates() {
-	dout.writefln();
-	foreach (Cell[] row; rows) {
-		foreach (Cell c; row) {
-			dout.writef("|");
-			int found;
-			for (int i = 0; i <= dim; ++i) {
-				if (c.candidates.contains(i)) {
-					dout.writef(charWidth > 1 ? " %*d" : "%*d", charWidth, i);
-					++found;
-				}
-			}
-			// -9 since the first 9 have only 1 char
-			// this is a very crap formula which gives incorrect results sometimes when dim is > 9.
-			// can't be bothered to fix it.
-			dout.writef(spread(' ', (charWidth+1)*dim - found - 9));
-		}
-		dout.writefln("|");
-	}
-	dout.writefln();
 }

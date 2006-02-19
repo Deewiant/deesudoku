@@ -3,8 +3,38 @@
      \------------------------------/
 
 --------------------------------------------------------------------------------
+ 1.1.1        2006-02-18
+--------------------------------------------------------------------------------
+ - Change: moved the "Solved!" output from showing the grid to the statistics.
+ - Change: added a check for whether the puzzle is solved at every iteration.
+           This is a significant optimisation, now that there are so many solve
+           methods.
+ - Internal: moved ++iterations from after calling the solve methods to before.
+ - Internal: moved XY-wing so that it is tried before ichthyology. A minor speed
+             increase results.
+
+--------------------------------------------------------------------------------
+ 1.1.0        2006-02-17
+--------------------------------------------------------------------------------
+ - New feature: timer. Packaged in with the rest of the stats. Counts only the
+                       time used in solving, not the total time taken.
+ - New option: --no-solve.
+ - New technique: XY-wing.
+ - Bug fix: iterations were not zeroed at the beginning of solving.
+ - Internal: added the handyish nCandidates() function.
+ - Internal: moved output functions to a module of their own. Still lots of
+             dout.writefln(), derr.writefln() elsewhere.
+
+--------------------------------------------------------------------------------
  1.0.0        2006-02-14
 --------------------------------------------------------------------------------
- - First numbered version!
- - Capabilities should now equal those of http://sudokusolver.co.uk/ - but only
-   in terms of "logic": no equivalent to its "Ariadne's Thread" bruteforcer.
+ - Milestone: first numbered version!
+ - Milestone: capabilities should now equal those of http://sudokusolver.co.uk/,
+              but only in terms of "logic": no equivalent to its "Ariadne's
+              Thread" bruteforcer.
+ - New technique: Ichthyology (X-Wing, Swordfish, etc.).
+ - New option: --help.
+ - New option: --version.
+ - New option: --check-validity.
+ - New option: --total-statistics.
+ - New option: --examples.

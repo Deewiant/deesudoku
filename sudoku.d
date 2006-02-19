@@ -7,9 +7,10 @@ private import
 	std.string,
 	std.c.stdlib, // good old exit()
 	sudoku.defs,
+	sudoku.output,
 	sudoku.solver;
 
-const char[] VERSION = "DeewiantSudoku 1.0.0 © Matti \"Deewiant\" Niemenmaa 2006.",
+const char[] VERSION = "DeewiantSudoku 1.1.0 © Matti \"Deewiant\" Niemenmaa 2006.",
              HELPMSG =
 "Usage: sudoku [OPTION]...
 Attempts to solve all Sudoku puzzles read from standard input.
@@ -41,7 +42,8 @@ Verbosity:
   -ssck, --suso-co-uk        Use output like that at http://sudokusolver.co.uk/.
 
 Behaviour:
-  -cv,   --check-validity    Check validity on every iteration; skip if invalid.",
+  -cv,   --check-validity    Check validity on every iteration; skip if invalid.
+  -ns,   --no-solve          Do not solve puzzles; only output initial state.",
              EXAMPLES =
 ".....319..1.87...43.7.615..7.9..5..6.........6..1..7.2..854.6.11...38.4..947.....
 5_26__7__+___9___1_+______385+__4_961__+_________+__527_9__+837______+_6___9___+__9__82_3
@@ -114,6 +116,9 @@ int main(char[][] args) {
 			case "--total-statistics", "-ts":
 				totalStats = true;
 				break;
+			case "--no-solve", "-ns":
+				noSolve = true;
+				break;
 			default:
 				derr.writefln("Unrecognised argument ", arg);
 				break;
@@ -133,6 +138,11 @@ int main(char[][] args) {
 		showGrid = showKey = terseOutput = ssckCompatible = false;
 	}
 
+/+	if (noGrid && noSolve && !showCandidates) {
+		derr.writefln("--no-solve and --no-grid without --show-candidates leave nothing whatsoever to be done...");
+		return 1;
+	}
++/
 	if (dim > ROWCHAR.length && (showCandidates || showKey || explain)) {
 		derr.writefln("Sorry, cannot show candidates or the key or explain with such a large grid -"
 		              "there are only %d available characters for rows.", ROWCHAR.length);
@@ -155,7 +165,7 @@ int main(char[][] args) {
 		derr.writefln("Ignoring --show-key...");
 		showKey = false;
 	}
-	
+
 	if (stats || totalStats)
 		someStats = true;
 
@@ -170,37 +180,46 @@ int main(char[][] args) {
 
 	while (!din.eof) {
 		if (load(sqrtDim)) {
+			charWidth = cast(int)ceil(log9(dim));
+
+			if (noSolve) {
+				printGrid();
+
+				if (showCandidates) {
+					updateCandidates();
+					printCandidates();
+				}
+
+				continue;
+			}
+
 			if (explain) {
 				dout.writefln("\n--- Starting a new 数独 puzzle... ---\n");
 				dout.flush();
 			}
-			
+
 			++number;
 			solve();
 		} else quit(666);
 	}
 
 	quit(0);
-	
+
 	return 999;
 }
 
 void quit(int n) {
 	if (totalStats)
-		printStats(totalStatistics, totalIterations, true);
-	
+		printStats(totalStatistics, totalIterations, totalTime, true);
+
 	std.c.stdlib.exit(n);
 }
 
-bool first;
-
 int load(int sqrtDim) {
 	// zero the situation so that old data doesn't corrupt the new
-	if (!first) {
-		grid.length = 0;
-		rows.length = cols.length = boxes.length = 0;
-		first = false;
-	}
+	// doesn't need to be done the first time, but whatever
+	grid.length = 0;
+	rows.length = cols.length = boxes.length = 0;
 
 	grid.length = dim * dim;
 	rows.length = cols.length = boxes.length = dim;
@@ -235,7 +254,7 @@ int load(int sqrtDim) {
 		char ch = din.getc();
 
 		// skip row on comment
-		if (ch == '#') while ((ch = din.getc()) != '\n') {}
+		if (ch == '#') while ((ch = din.getc()) != '\n' && !din.eof) {}
 
 		if (ch == '!') {
 			terseMode = true;

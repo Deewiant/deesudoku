@@ -20,70 +20,16 @@ alias NONE EMPTY;
 Cell[] grid;
 Cell[][] rows, cols, boxes;
 
-// verbosity levels
-bit showCandidates,
-    showGrid,
-    showKey,
-    explain,
-    terseOutput,
-    ssckCompatible,
-    stats,
-    noGrid,
-    totalStats;
-
 // behaviour
 bit checkValidity,
-    someStats;
+    someStats,
+    noSolve;
 int dim = 9;
 
 ulong[char[]] totalStatistics;
 ulong         totalIterations;
+long          totalTime;
 ulong         completed, number;
-
-void printStats(ulong[char[]] theStats, ulong iters, bool total = false) {
-	// space out
-	if (noGrid)
-		dout.writefln();
-
-	dout.writefln("Iterations: ", iters);
-
-	if (!theStats.length)
-		return;
-
-	dout.writefln("Methods used:");
-	char[][] strs;
-	ulong[] ns;
-	strs.length = ns.length = theStats.length;
-	int longest;
-	int c;
-	foreach (char[] s, ulong n; theStats) {
-		if (n > 0) {
-			strs[c] = s;
-			if (s.length > longest)
-				longest = s.length;
-			ns[c++] = n;
-		}
-	}
-
-	// selection sort ns to descending order, moving strs as we go
-	for (int i = 0; i < ns.length - 1; ++i) {
-		int putLeft = i;
-
-		for (int j = i + 1; j < ns.length; ++j)
-			if (ns[j] > ns[putLeft])
-				putLeft = j;
-		char[] tmp;              ulong tmp2;
-		tmp = strs[i];           tmp2 = ns[i];
-		strs[i] = strs[putLeft]; ns[i] = ns[putLeft];
-		strs[putLeft] = tmp;     ns[putLeft] = tmp2;
-	}
-
-	foreach (int i, char[] str; strs)
-		dout.writefln("\t%s: %*d", str, cast(int)(longest + toString(ns[i]).length - str.length), ns[i]);
-
-	if (total)
-		dout.writefln("\nSolved %d/%d Sudokus.", completed, number);
-}
 
 class Cell {
 	int val;
