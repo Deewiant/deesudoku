@@ -3,6 +3,16 @@
      \------------------------------/
 
 --------------------------------------------------------------------------------
+ 1.2.0        2006-02-19
+--------------------------------------------------------------------------------
+ - Milestone: all the "simple advanced" techniques are implemented. Next up is
+              stuff like Colouring and Forcing chains.
+ - New technique: XYZ-wing. Placed before XY-wing and Ichthyology due to its
+                            ubiquitousness.
+ - Internal: moved buddies() from being a separate function to a method of Cell.
+ - Internal: overloaded contains() for int[], int[].
+
+--------------------------------------------------------------------------------
  1.1.1        2006-02-18
 --------------------------------------------------------------------------------
  - Change: moved the "Solved!" output from showing the grid to the statistics.
@@ -10,7 +20,7 @@
            This is a significant optimisation, now that there are so many solve
            methods.
  - Internal: moved ++iterations from after calling the solve methods to before.
- - Internal: moved XY-wing so that it is tried before ichthyology. A minor speed
+ - Internal: moved XY-wing so that it is tried before Ichthyology. A minor speed
              increase results.
 
 --------------------------------------------------------------------------------

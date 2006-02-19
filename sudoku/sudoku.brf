@@ -3,3 +3,4 @@ sudoku
 -inline
 -release
 -odobj
+-I..

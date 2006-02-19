@@ -75,7 +75,24 @@ class Cell {
 		return removed;
 	}
 
+	Cell[] buddies() {
+		Cell[] bs;
+		bs.length = 3 * (dim - 1);
+		int i;
 
+		foreach (Cell c; rows [row])
+			if (this !is c)
+				bs[i++] = c;
+		foreach (Cell c; cols [col])
+			if (this !is c)
+				bs[i++] = c;
+		foreach (Cell c; boxes[box])
+			if (this !is c)
+				bs[i++] = c;
+
+		bs.length = i;
+		return bs;
+	}
 
 	int opCmp(Object o) {
 		Cell c = cast(Cell)o;
@@ -110,6 +127,12 @@ int contains(int[] a, int n) {
 		if (i == n)
 			return true;
 	return false;
+}
+int contains(int[] a, int[] b) {
+	foreach (int i; b)
+		if (!a.contains(i))
+			return false;
+	return true;
 }
 int contains(Cell[] a, Cell c) {
 	foreach (Cell ce; a)

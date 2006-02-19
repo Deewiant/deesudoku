@@ -51,7 +51,7 @@ void solve() {
 			break;
 		}
 
-		if (!noGrid || explain || stats)
+		if (!noGrid || explain || stats || checkValidity)
 			dout.flush();
 	} while (changed);
 
@@ -94,6 +94,7 @@ static this() {
 	methods ~= &checkConstraints;
 	methods ~= &nakedSubset;
 	methods ~= &hiddenSubset;
+	methods ~= &xyzWing;
 	methods ~= &xyWing;
 	methods ~= &ichthyology;
 }
@@ -806,7 +807,7 @@ bool xyWing() {
 		Cell[][] goodGroups;
 		goodGroups.length = dim;
 
-		Cell[] cBuddies = buddies(c);
+		Cell[] cBuddies = c.buddies;
 
 		// find all buddies of c with candidates X and Z.
 		// add each one to its own Cell[] in goodGroups.
@@ -863,7 +864,7 @@ bool xyWing() {
 
 				int removed;
 
-				foreach (Cell target; buddies(goodPair[0]))
+				foreach (Cell target; goodPair[0].buddies)
 					if (target !is c && target !is goodPair[1] && areBuddies(target, goodPair[1]))
 						removed += target.removeCandidates(Z[i]);
 
@@ -894,9 +895,95 @@ bool xyWing() {
 	return false;
 }
 
-// In XYZ-wing the XZ cell must share a box with XYZ, and eliminations are done in that box along the line between XYZ and YZ.
+// When a cell with candidates XYZ has 2 buddies with candidates XZ and YZ, Z can be removed as a candidate from any cell that has all 3 of these cells as a buddy.
+// XZ must be in same box as XYZ, YZ must be in same row/column as XYZ
+// and if all three are in same box, it was a naked triple
+// the only cells that have all 3 of those cells as a buddy are along the line from XYZ to YZ (can be on the other side of XYZ)
 bool xyzWing() {
+	const char[] name = "XYZ-wing";
 
+	foreach (Cell XYZ; grid) {
+		if (XYZ.candidates.length != 3)
+			continue;
+
+		Cell[] XZs;
+		int[2][] shared; // i.e. the X and Z candidates
+		XZs.length = shared.length = dim - 1;
+		int i;
+		foreach (Cell XZ; boxes[XYZ.box]) {
+			if (XZ.candidates.length != 2 || !XYZ.candidates.contains(XZ.candidates))
+				continue;
+
+			if (XZ.candidates[0] == XYZ.candidates[0]) {
+				XZs[i] = XZ;
+				shared[i][0] = XYZ.candidates[0];
+				if (XZ.candidates[1] == XYZ.candidates[1])
+					shared[i++][1] = XYZ.candidates[1];
+				else // (XZ.candidates[1] == XYZ.candidates[2])
+					shared[i++][1] = XYZ.candidates[2];
+			} else if (XZ.candidates[0] == XYZ.candidates[1]) {
+				// (XZ.candidates[1] == XYZ.candidates[2])
+				XZs[i] = XZ;
+				shared[i][0] = XYZ.candidates[1];
+				shared[i++][1] = XYZ.candidates[2];
+			}
+			// there are no other cases since both candidates are sorted
+			// and XZ.candidates must be in XYZ.candidates
+		}
+		XZs.length = shared.length = i;
+
+		// now we have the XZs as well as the Xs and Zs
+		// so we need the YZs
+
+		Cell[] YZs = rows[XYZ.row] ~ cols[XYZ.col];
+		foreach (Cell YZ; YZs) {
+			if (YZ.candidates.length != 2 || !XYZ.candidates.contains(YZ.candidates) || YZ.box == XYZ.box)
+				continue;
+
+			foreach (int i, Cell XZ; XZs) {
+				if (YZ.candidates == XZ.candidates)
+					continue;
+
+				// so it's an YZ
+				// but what's the Z?
+				// it must be in shared[i] as well as in YZ
+				// and there can be only one such one, or the above if would've been true
+
+				int Z = shared[i][0];
+				if (YZ.candidates.contains(shared[i][1]))
+					Z = shared[i][1];
+
+				// yay, proceed with removal
+				int removed;
+				Cell[] loopThru = YZ.row == XYZ.row ? rows[XYZ.row] : cols[XYZ.col];
+
+				foreach (inout Cell c; loopThru)
+					if (c.box == XYZ.box && c !is XYZ && c !is XZ)
+						removed += c.removeCandidates(Z);
+
+				if (removed > 0) {
+					if (explain) {
+						dout.writef(
+							"Found an %s among %s for %d; ",
+							name,
+							format("%s, %s, %s", XYZ, XZ, YZ),
+							Z
+						);
+
+						dout.writefln(
+							"eliminated %s for %d.",
+							nCandidates(removed), Z
+						);
+					}
+
+					if (someStats)
+						++statistics[name ~ 's'];
+
+					return true;
+				}
+			}
+		}
+	}
 
 	return false;
 }
@@ -934,25 +1021,6 @@ void updateCandidatesAffectedBy(Cell cell) {
 	foreach (inout Cell c; boxes[cell.box])
 		if (cell !is c)
 			updateCandidates(c);
-}
-
-Cell[] buddies(Cell cell) {
-	Cell[] bs;
-	bs.length = 3 * (dim - 1);
-	int i;
-
-	foreach (Cell c; rows [cell.row])
-		if (cell !is c)
-			bs[i++] = c;
-	foreach (Cell c; cols [cell.col])
-		if (cell !is c)
-			bs[i++] = c;
-	foreach (Cell c; boxes[cell.box])
-		if (cell !is c)
-			bs[i++] = c;
-
-	bs.length = i;
-	return bs;
 }
 
 bool areBuddies(Cell a, Cell[] b...) {
