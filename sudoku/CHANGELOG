@@ -3,6 +3,34 @@
      \------------------------------/
 
 --------------------------------------------------------------------------------
+ 1.2.1        2006-02-20
+--------------------------------------------------------------------------------
+ - New option: --row-numbers.
+ - Change: to reflect --row-numbers, removed silly characters from ROWCHARS, so
+           big grids can now only be explained/keyed/etc with --row-numbers set.
+ - Bug fix: fixed spacing in output - removed some extraneous newlines, added
+            others, and such.
+ - Bug fix: had left something accidentally commented out, put it back in.
+ - Bug fix: Hidden Subset code was completely foobar!! Extremely slow - it was
+            faster to check only for naked subsets up to 2*dim than for nakeds
+            of size dim/2 and hiddens of size (dim-1)/2 - and didn't find what
+            it should have.
+            Well, it's still that slow, but much faster. The major bottleneck is
+            clearly Parter, but I don't see how to manage without it.
+ - Internal: removed the quit() function - std.c.stdlib.exit() breaks code
+             coverage (which, I think, is because it breaks module destructors).
+ - Internal: changed the noGrid "return 1" to a "return 42".
+ - Internal: some minor optimisations in hiddenSubset(), ichthyology(),
+             updateCandidates(Cell[]), and Parter.all().
+ - Internal: added hasCandidate(int[], int), which mostly replaces
+             contains(int[], int). It's a binary, instead of linear, search.
+ - Internal: modified Cell.find (renamed it to findCandidate) to also use a
+             binary search.
+ - Internal: removed "inout" from all places where they referred to Cells, given
+             that they're unnecessary (though sometimes helpful to readers of
+             the code). I suspected that it would improve speed and was right.
+
+--------------------------------------------------------------------------------
  1.2.0        2006-02-19
 --------------------------------------------------------------------------------
  - Milestone: all the "simple advanced" techniques are implemented. Next up is

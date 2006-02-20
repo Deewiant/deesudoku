@@ -5,12 +5,11 @@ private import
 	std.cstream,
 	std.math,
 	std.string,
-	std.c.stdlib, // good old exit()
 	sudoku.defs,
 	sudoku.output,
 	sudoku.solver;
 
-const char[] VERSION = "DeewiantSudoku 1.2.0 © Matti \"Deewiant\" Niemenmaa 2006.",
+const char[] VERSION = "DeewiantSudoku 1.2.1 © Matti \"Deewiant\" Niemenmaa 2006.",
              HELPMSG =
 "Usage: sudoku [OPTION]...
 Attempts to solve all Sudoku puzzles read from standard input.
@@ -37,6 +36,7 @@ Verbosity:
   -sg,   --show-grid         Show the grid on every iteration.
   -sk,   --show-key          Show the legend around the grid.
   -sc,   --show-candidates   Show the candidate grid on every iteration.
+  -rn,   --row-numbers       Use r1c1-style instead of [A1]-style output.
   -ng,   --no-grid           Do not display even the final, solved grid.
   -to,   --terse-output      Use non-human-readable, terse output.
   -ssck, --suso-co-uk        Use output like that at http://sudokusolver.co.uk/.
@@ -119,6 +119,9 @@ int main(char[][] args) {
 			case "--no-solve", "-ns":
 				noSolve = true;
 				break;
+			case "--row-numbers", "-rn":
+				rowNums = true;
+				break;
 			default:
 				derr.writefln("Unrecognised argument ", arg);
 				break;
@@ -138,12 +141,12 @@ int main(char[][] args) {
 		showGrid = showKey = terseOutput = ssckCompatible = false;
 	}
 
-/+	if (noGrid && noSolve && !showCandidates) {
+	if (noGrid && noSolve && !showCandidates) {
 		derr.writefln("--no-solve and --no-grid without --show-candidates leave nothing whatsoever to be done...");
-		return 1;
+		return 42;
 	}
-+/
-	if (dim > ROWCHAR.length && (showCandidates || showKey || explain)) {
+
+	if (!rowNums && dim > ROWCHAR.length && (showCandidates || showKey || explain)) {
 		derr.writefln("Sorry, cannot show candidates or the key or explain with such a large grid -"
 		              "there are only %d available characters for rows.", ROWCHAR.length);
 		showCandidates = showKey = explain = false;
@@ -173,14 +176,16 @@ int main(char[][] args) {
 	int sqrtDim = cast(int)n;
 	if (n != sqrtDim) {
 		derr.writefln("Invalid dimension: the dimension must be a square number.");
-		quit(42);
+		return 42;
 	}
 
 	prettyPrintInterval = sqrtDim;
 
+	int errorLevel = 0;
 	while (!din.eof) {
 		if (load(sqrtDim)) {
 			charWidth = cast(int)ceil(log9(dim));
+			++number;
 
 			if (noSolve) {
 				printGrid();
@@ -194,25 +199,23 @@ int main(char[][] args) {
 			}
 
 			if (explain) {
-				dout.writefln("\n--- Starting a new 数独 puzzle... ---\n");
+				if (number > 1)
+					dout.writefln();
+				dout.writefln("--- Starting a new 数独 puzzle... ---\n");
 				dout.flush();
 			}
 
-			++number;
 			solve();
-		} else quit(666);
+		} else {
+			errorLevel = 666;
+			break;
+		}
 	}
 
-	quit(0);
-
-	return 999;
-}
-
-void quit(int n) {
 	if (totalStats)
 		printStats(totalStatistics, totalIterations, totalTime, true);
 
-	std.c.stdlib.exit(n);
+	return errorLevel;
 }
 
 int load(int sqrtDim) {

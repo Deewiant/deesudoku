@@ -107,7 +107,7 @@ bool expandSingleCandidates() {
 	const char[] name = "Naked singles";
 	bool changed;
 
-	foreach (inout Cell c; grid) {
+	foreach (Cell c; grid) {
 		if (c.candidates.length == 1) {
 			c.val = c.candidates[0];
 			c.candidates.length = 0;
@@ -131,7 +131,7 @@ bool assignUniques() {
 	const char[] name = "Hidden singles";
 	bool changed;
 
-	foreach (inout Cell[] row; rows) {
+	foreach (Cell[] row; rows) {
 		int[int] canCount, // key is candidate value, value is number of such candidates
 		         position; // key is candidate value, value is Cell's position
 		                   // yes, this can get overwritten, but not if there's only one such candidate
@@ -152,7 +152,7 @@ bool assignUniques() {
 				if (explain) {
 					dout.writefln("Cell %s is the only one in row %s to have the candidate %d.",
 					              c.toString,
-					              ROWCHAR[c.row],
+					              getRow(c.row),
 					              c.val
 					);
 				}
@@ -166,7 +166,7 @@ bool assignUniques() {
 		}
 	}
 
-	foreach (inout Cell[] col; cols) {
+	foreach (Cell[] col; cols) {
 		int[int] canCount,
 		         position;
 
@@ -200,7 +200,7 @@ bool assignUniques() {
 		}
 	}
 
-	foreach (inout Cell[] box; boxes) {
+	foreach (Cell[] box; boxes) {
 		int[int] canCount,
 		         position;
 
@@ -262,7 +262,7 @@ bool checkConstraints() {
 		foreach (int value; boxOf.keys) {
 			if (boxOf[value] != -1 && nFound[value] > 1) {
 				int removed;
-				foreach (inout Cell cell; boxes[boxOf[value]])
+				foreach (Cell cell; boxes[boxOf[value]])
 					if ((col && cell.col != r) || (!col && cell.row != r))
 						removed += cell.removeCandidates(value);
 
@@ -288,7 +288,7 @@ bool checkConstraints() {
 	}
 
 	foreach (int r, Cell[] row; rows)
-		if (rowColFunc(r, row, format("row %s", ROWCHAR[r]), false))
+		if (rowColFunc(r, row, format("row %s", getRow(r)), false))
 			return true;
 	foreach (int c, Cell[] col; cols)
 		if (rowColFunc(c, col, format("column %d", c + 1), true))
@@ -312,7 +312,7 @@ bool checkConstraints() {
 		foreach (int value; colOf.keys) {
 			if (colOf[value] != -1 && nCFound[value] > 1) {
 				int removed;
-				foreach (inout Cell cell; cols[colOf[value]])
+				foreach (Cell cell; cols[colOf[value]])
 					if (cell.box != b)
 						removed += cell.removeCandidates(value);
 
@@ -345,14 +345,14 @@ bool checkConstraints() {
 		foreach (int value; rowOf.keys) {
 			if (rowOf[value] != -1 && nRFound[value] > 1) {
 				int removed;
-				foreach (inout Cell cell; rows[rowOf[value]])
+				foreach (Cell cell; rows[rowOf[value]])
 					if (cell.box != b)
 						removed += cell.removeCandidates(value);
 
 				if (removed > 0) {
 					if (explain) {
 						dout.writef("Row %s must contain %d in box at %s; ",
-						            ROWCHAR[rowOf[value]], value, boxes[b][0].toString);
+						            getRow(rowOf[value]), value, boxes[b][0].toString);
 						dout.writefln("eliminated %s for %d.", nCandidates(removed), value);
 					}
 
@@ -391,7 +391,7 @@ bool nakedSubset() {
 						if (c.candidates.length > 0) {
 							sameCands = true;
 							foreach (int candidate; c.candidates) {
-								if (!cands.contains(candidate)) {
+								if (!cands.hasCandidate(candidate)) {
 									sameCands = false;
 									break;
 								}
@@ -458,15 +458,15 @@ bool nakedSubset() {
 		}
 	}
 
-	foreach (int i, inout Cell[] row; rows) {
-		generalFunction(row, format("row ", ROWCHAR[i]));
+	foreach (int i, Cell[] row; rows) {
+		generalFunction(row, format("row ", getRow(i)));
 		if (changed) return changed;
 	}
-	foreach (int i, inout Cell[] col; cols) {
+	foreach (int i, Cell[] col; cols) {
 		generalFunction(col, format("column ", i + 1));
 		if (changed) return changed;
 	}
-	foreach (inout Cell[] box; boxes) {
+	foreach (Cell[] box; boxes) {
 		generalFunction(box, format("box at %s", box[0].toString));
 		if (changed) return changed;
 	}
@@ -482,54 +482,93 @@ bool nakedSubset() {
 bool hiddenSubset() {
 	const char[] name = "Hidden subsets";
 
+	// http://www.setbb.com/phpbb/viewtopic.php?t=273&mforum=sudoku
+	// as to why (dim-1)/2
+	int limit = (dim-1)/2;
+
 	bool generalFunction(Cell[] area) {
-		// http://www.setbb.com/phpbb/viewtopic.php?t=273&mforum=sudoku
-		// as to why (dim-1)/2
-		for (int n = 2; n <= (dim-1)/2; ++n) {
-			Cell[][] found;
-			found.length = dim;
 
-			for (int val = 1; val <= dim; ++val) {
-				foreach (Cell c; area)
-					if (c.candidates.contains(val))
-						found[val-1] ~= c;
+		Cell[][] each = new Cell[][dim];
+		int[] i = new int[dim];
 
-				if (found[val-1].length != n)
-					found[val-1].length = 0;
+		for (int val = 0; val < dim; ++val) {
+			each[val].length = dim;
+			foreach (Cell c; area)
+				if (c.candidates.hasCandidate(val+1))
+					each[val][i[val]++] = c;
+		}
+
+		for (int n = 2; n <= limit; ++n) {
+			Cell[][] found = each.dup;
+
+			int upToNCands;
+			for (int val = 0; val < dim; ++val) {
+				if (i[val] <= n) {
+					found[val].length = i[val];
+					++upToNCands;
+				} else
+					found[val].length = 0;
 			}
 
-			// now e.g. found[0] is all the Cells with candidate 1
+			// now e.g. found[0] is all the Cells in area with candidate 1
+			// unless there were more than n such Cells, in which case
+			// they couldn't be part of a subset of size n
+
+			// if there weren't enough Cells with up to n candidates no such
+			// hidden subset can exist
+			if (upToNCands < n)
+				break;
 
 			auto p = new Parter!(Cell[])(found, n);
 			Cell[][] subFound;
-
 			while ((subFound = p.next()) !is null) {
+				// so what we have in subFound are n Cell[]s
+				// each of which are all the Cells in area for a certain candidate
 
-				// make sure they're all the same
-				// and figure out which numbers we're looking at
-				Cell[] firstList;
-				int[] vals;
-				foreach (int i, Cell[] inSub; subFound) {
-					if (i == 0)
-						firstList = inSub;
-					else if (inSub != firstList)
+				// make sure that there are only n different Cells altogether
+				// and figure out which candidates we're looking at
+
+				Cell[] cells = new Cell[n];
+				bit[Cell] checked;
+				int[] vals = new int[n];
+				int j, h;
+				foreach (Cell[] inSub; subFound) {
+					if (!inSub.length)
 						goto continueOuter;
 
-					foreach (int i, Cell[] cs; found)
-						if (inSub == cs && !vals.contains(i+1))
-							vals ~= i+1;
+					foreach (Cell c; inSub) {
+						if (!(c in checked)) {
+							if (h >= n) // oops, too many different cells
+								goto continueOuter;
+
+							cells[h++] = c;
+							checked[c] = true;
+						}
+					}
+
+					// figure out the candidates
+					for (int k = 1; k <= dim; ++k) {
+						if (inSub is found[k-1] && !vals.hasCandidate(k)) {
+							if (j >= n) // oops, too many different candidates
+								goto continueOuter;
+
+							vals[j++] = k;
+						}
+					}
 				}
+				// both for binary search (in Cell.removeCandidatesExcept())
+				// to work and to get nicer output when explaining
+				vals.sort;
 
-				// OK, they're the same
-
-				// remove all other candidates from each Cell
-				// can loop through only first one in subFound since they're all the same
+				// OK, we have a hidden subset
+				// remove all other candidates from each Cell in cells
 
 				int removed;
 				char[] cellList;
-				foreach (inout Cell c; subFound[0]) {
+				foreach (Cell c; cells) {
 					removed += c.removeCandidatesExcept(vals);
-					cellList ~= format("%s, ", c.toString);
+					if (explain)
+						cellList ~= format("%s, ", c.toString);
 				}
 
 				if (removed > 0) {
@@ -564,18 +603,15 @@ bool hiddenSubset() {
 		return false;
 	}
 
-	foreach (inout Cell[] row; rows) {
+	foreach (Cell[] row; rows)
 		if (generalFunction(row))
 			return true;
-	}
-	foreach (inout Cell[] col; cols) {
+	foreach (Cell[] col; cols)
 		if (generalFunction(col))
 			return true;
-	}
-	foreach (inout Cell[] box; boxes) {
+	foreach (Cell[] box; boxes)
 		if (generalFunction(box))
 			return true;
-	}
 
 	return false;
 }
@@ -594,19 +630,24 @@ bool ichthyology() {
 	for (int n = 2; n <= dim/2; ++n) {
 		// rows first
 		for (int val = 1; val <= dim; ++val) {
-			Cell[][] found;
+			Cell[][] found = new Cell[][dim];
+			int f = 0;
 
 			foreach (int i, Cell[] row; rows) {
-				Cell[] cs;
+				Cell[] cs = new Cell[dim];
+				int s;
 
 				// put the candidate cells from row to cs
 				foreach (Cell c; row)
-					if (c.candidates.contains(val))
-						cs ~= c;
+					if (c.candidates.hasCandidate(val))
+						cs[s++] = c;
 
-				if (cs.length >= 2 && cs.length <= n)
-					found ~= cs.dup;
+				if (s >= 2 && s <= n) {
+					cs.length = s;
+					found[f++] = cs.dup;
+				}
 			}
+			found.length = f;
 
 			// so now found contains all the rows with 2 to n candidates for val
 			// so we need to look at every subset of size n of found
@@ -622,7 +663,8 @@ bool ichthyology() {
 				char[] cellList;
 				foreach (int i, Cell[] row; subFound) {
 					foreach (Cell c; row) {
-						cellList ~= format("%s, ", c.toString);
+						if (explain)
+							cellList ~= format("%s, ", c.toString);
 
 						if (!(c.col in seenCols)) {
 							seenCols[c.col] = true;
@@ -643,10 +685,11 @@ bool ichthyology() {
 				bool[int] listedRows;
 
 				foreach (int i; seenCols.keys) {
-					foreach (inout Cell c; cols[i]) {
+					foreach (Cell c; cols[i]) {
 						if (c.row in foundRows) {
 							if (!(c.row in listedRows)) {
-								rowList ~= format("%s, ", ROWCHAR[c.row]);
+								if (explain)
+									rowList ~= format("%s, ", getRow(c.row));
 								listedRows[c.row] = true;
 							}
 						} else
@@ -702,7 +745,7 @@ bool ichthyology() {
 
 				// get the candidate cells in cs
 				foreach (Cell c; col)
-					if (c.candidates.contains(val))
+					if (c.candidates.hasCandidate(val))
 						cs ~= c;
 
 				if (cs.length >= 2 && cs.length <= n)
@@ -718,7 +761,8 @@ bool ichthyology() {
 				char[] cellList;
 				foreach (int i, Cell[] col; subFound) {
 					foreach (Cell c; col) {
-						cellList ~= format("%s, ", c.toString);
+						if (explain)
+							cellList ~= format("%s, ", c.toString);
 
 						if (!(c.row in seenRows)) {
 							seenRows[c.row] = true;
@@ -736,7 +780,7 @@ bool ichthyology() {
 				char[] colList;
 				bool[int] listedCols;
 				foreach (int i; seenRows.keys) {
-					foreach (inout Cell c; rows[i]) {
+					foreach (Cell c; rows[i]) {
 						if (c.col in foundCols) {
 							if (!(c.col in listedCols)) {
 								colList  ~= format("%d, ", c.col+1);
@@ -842,12 +886,12 @@ bool xyWing() {
 				otherIsX = false;
 			}
 			foreach (Cell friend; cBuddies) {
-				if (friend.candidates.length != 2 || !friend.candidates.contains(z))
+				if (friend.candidates.length != 2 || !friend.candidates.hasCandidate(z))
 					continue;
 
-				if (otherIsX && friend.candidates.contains(Y))
+				if (otherIsX && friend.candidates.hasCandidate(Y))
 					goodGroups[i] ~= friend;
-				else if (!otherIsX && friend.candidates.contains(X))
+				else if (!otherIsX && friend.candidates.hasCandidate(X))
 					goodGroups[i] ~= friend;
 			}
 		}
@@ -911,7 +955,7 @@ bool xyzWing() {
 		XZs.length = shared.length = dim - 1;
 		int i;
 		foreach (Cell XZ; boxes[XYZ.box]) {
-			if (XZ.candidates.length != 2 || !XYZ.candidates.contains(XZ.candidates))
+			if (XZ.candidates.length != 2 || !XYZ.candidates.hasCandidates(XZ.candidates))
 				continue;
 
 			if (XZ.candidates[0] == XYZ.candidates[0]) {
@@ -937,7 +981,7 @@ bool xyzWing() {
 
 		Cell[] YZs = rows[XYZ.row] ~ cols[XYZ.col];
 		foreach (Cell YZ; YZs) {
-			if (YZ.candidates.length != 2 || !XYZ.candidates.contains(YZ.candidates) || YZ.box == XYZ.box)
+			if (YZ.candidates.length != 2 || !XYZ.candidates.hasCandidates(YZ.candidates) || YZ.box == XYZ.box)
 				continue;
 
 			foreach (int i, Cell XZ; XZs) {
@@ -950,14 +994,14 @@ bool xyzWing() {
 				// and there can be only one such one, or the above if would've been true
 
 				int Z = shared[i][0];
-				if (YZ.candidates.contains(shared[i][1]))
+				if (YZ.candidates.hasCandidate(shared[i][1]))
 					Z = shared[i][1];
 
 				// yay, proceed with removal
 				int removed;
 				Cell[] loopThru = YZ.row == XYZ.row ? rows[XYZ.row] : cols[XYZ.col];
 
-				foreach (inout Cell c; loopThru)
+				foreach (Cell c; loopThru)
 					if (c.box == XYZ.box && c !is XYZ && c !is XZ)
 						removed += c.removeCandidates(Z);
 
@@ -992,33 +1036,36 @@ bool xyzWing() {
 //////////
 
 package void updateCandidates() {
-	foreach (inout Cell cell; grid)
+	foreach (Cell cell; grid)
 		updateCandidates(cell);
 }
 
-void updateCandidates(inout Cell cell) {
-	int[] impossible;
+void updateCandidates(Cell cell) {
+	int[] impossible = new int[3*(dim-1)];
+	int i;
 
 	foreach (Cell c; rows [cell.row])
 		if (!impossible.contains(c.val))
-			impossible ~= c.val;
+			impossible[i++] = c.val;
 	foreach (Cell c; cols [cell.col])
 		if (!impossible.contains(c.val))
-			impossible ~= c.val;
+			impossible[i++] = c.val;
 	foreach (Cell c; boxes[cell.box])
 		if (!impossible.contains(c.val))
-			impossible ~= c.val;
+			impossible[i++] = c.val;
+	impossible.length = i;
+
 	cell.removeCandidates(impossible);
 }
 
 void updateCandidatesAffectedBy(Cell cell) {
-	foreach (inout Cell c; rows [cell.row])
+	foreach (Cell c; rows [cell.row])
 		if (cell !is c)
 			updateCandidates(c);
-	foreach (inout Cell c; cols [cell.col])
+	foreach (Cell c; cols [cell.col])
 		if (cell !is c)
 			updateCandidates(c);
-	foreach (inout Cell c; boxes[cell.box])
+	foreach (Cell c; boxes[cell.box])
 		if (cell !is c)
 			updateCandidates(c);
 }

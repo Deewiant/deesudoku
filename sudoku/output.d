@@ -33,7 +33,7 @@ char[] spread(char c, int n = charWidth) {
 
 void printGrid() {
 	// space out a bit
-	if (explain || stats)
+	if (number > 1 || explain)
 		dout.writefln();
 
 	if (ssckCompatible) {
@@ -58,6 +58,8 @@ void printGrid() {
 			else
 				dout.writef(charWidth > 1 ? " %*d" : "%*d", charWidth, c.val);
 		}
+		if (explain || someStats)
+			dout.writefln();
 	} else {
 		void horizRule() {
 			char[] tmp;
@@ -67,15 +69,21 @@ void printGrid() {
 				tmp ~= '+';
 			}
 
+			if (showKey)
+				dout.writef(spread(' ', rowNums ? charWidth : 1), '+');
+
 			// lose the last +
-			dout.writefln(showKey ? " +" : "", tmp[0 .. $-1]);
+			dout.writefln(tmp[0 .. $-1]);
 		}
 
 		if (showKey) {
 			// the column values
 
-			// skip past the row values and the left border
-			dout.writef("  ");
+			// skip past the row values...
+			dout.writef(spread(' ', rowNums ? charWidth : 1));
+
+			// ...and the left border
+			dout.writef(' ');
 
 			for (int i = 0, j = 0; j < dim; ++i) {
 				if (i > 0 && i % prettyPrintInterval == 0)
@@ -92,8 +100,14 @@ void printGrid() {
 			if (i > 0 && i % prettyPrintInterval == 0)
 				horizRule();
 
-			if (showKey)
-				dout.writef("%s|", ROWCHAR[i]);
+			if (showKey) {
+				if (rowNums)
+					dout.writef("%*d", charWidth, i+1);
+				else
+					dout.writef("%s", ROWCHAR[i]);
+
+				dout.writef('|');
+			}
 
 			foreach (int j, Cell c; row) {
 				if (j > 0 && j % prettyPrintInterval == 0)
@@ -108,8 +122,6 @@ void printGrid() {
 			dout.writefln();
 		}
 	}
-
-	dout.writefln();
 }
 
 void printCandidates() {
@@ -119,7 +131,7 @@ void printCandidates() {
 			dout.writef("|");
 			int found;
 			for (int i = 0; i <= dim; ++i) {
-				if (c.candidates.contains(i)) {
+				if (c.candidates.hasCandidate(i)) {
 					dout.writef(charWidth > 1 ? " %*d" : "%*d", charWidth, i);
 					++found;
 				}
@@ -136,7 +148,7 @@ void printCandidates() {
 
 void printStats(ulong[char[]] theStats, ulong iters, long time, bool total = false) {
 	// space out
-	if (noGrid)
+	if (!noGrid || (noGrid && number > 1))
 		dout.writefln();
 
 	if (!total && done)

@@ -23,7 +23,8 @@ Cell[][] rows, cols, boxes;
 // behaviour
 bit checkValidity,
     someStats,
-    noSolve;
+    noSolve,
+    rowNums;
 int dim = 9;
 
 ulong[char[]] totalStatistics;
@@ -37,7 +38,10 @@ class Cell {
 	int[] candidates;
 
 	int removeCandidates(int[] impossible...) {
-		int removed;
+		if (val != NONE)
+			return 0;
+
+		int removed = 0;
 		bool[int] checked;
 
 		foreach (int i; impossible) {
@@ -46,7 +50,7 @@ class Cell {
 			else
 				checked[i] = true;
 
-			int pos = find(i);
+			int pos = findCandidate(i);
 
 			if (pos != -1) {
 				++removed;
@@ -58,13 +62,16 @@ class Cell {
 	}
 
 	int removeCandidatesExcept(int[] only...) {
+		if (val != NONE)
+			return 0;
+
 		int removed;
 
 		for (int i = 1; i <= dim; ++i) {
-			if (only.contains(i))
+			if (only.hasCandidate(i))
 				continue;
 
-			int pos = find(i);
+			int pos = findCandidate(i);
 
 			if (pos != -1) {
 				++removed;
@@ -101,38 +108,65 @@ class Cell {
 	}
 
 	char[] toString() {
-		return format("[%s%d]", ROWCHAR[row], col + 1);
+		if (rowNums)
+			return format("r%dc%d", row + 1, col + 1);
+		else
+			return format("[%s%d]", ROWCHAR[row], col + 1);
 	}
 
-	private ptrdiff_t find(int i) {
-		ptrdiff_t p = -1;
-		foreach (ptrdiff_t j, int n; candidates) {
-			if (i == n) {
-				p = j;
-				break;
-			}
+	private ptrdiff_t findCandidate(int i) {
+		int left = -1, right = candidates.length, mid;
+		while (right - left > 1) {
+			mid = (left + right) / 2;
+
+			if (candidates[mid] < i)
+				left = mid;
+			else
+				right = mid;
 		}
-		return p;
+		if (right == candidates.length || candidates[right] != i)
+			return -1;
+		else
+			return right;
 	}
 }
 
-int contains(char[] a, char c) {
-	foreach (char ch; a)
-		if (ch == c)
-			return true;
-	return false;
+int hasCandidate(int[] a, int n) {
+	if (!a.length)
+		return false;
+
+	int left = -1, right = a.length, mid;
+	while (right - left > 1) {
+		mid = (left + right) / 2;
+
+		if (a[mid] < n)
+			left = mid;
+		else
+			right = mid;
+	}
+	if (right == a.length || a[right] != n)
+		return false;
+	else
+		return true;
 }
+int hasCandidates(int[] a, int[] b) {
+	foreach (int i; b)
+		if (!a.hasCandidate(i))
+			return false;
+	return true;
+}
+
 int contains(int[] a, int n) {
 	foreach (int i; a)
 		if (i == n)
 			return true;
 	return false;
 }
-int contains(int[] a, int[] b) {
-	foreach (int i; b)
-		if (!a.contains(i))
-			return false;
-	return true;
+int contains(char[] a, char c) {
+	foreach (char ch; a)
+		if (ch == c)
+			return true;
+	return false;
 }
 int contains(Cell[] a, Cell c) {
 	foreach (Cell ce; a)
@@ -143,7 +177,7 @@ int contains(Cell[] a, Cell c) {
 
 class Parter(T) {
 	this(T[] a, size_t n) {
-		arr = a.dup;
+		arr = a;
 		positions.length = n;
 
 		// initialize positions so that positions[$-1] = 0, positions[0]=n-1
@@ -171,10 +205,18 @@ class Parter(T) {
 	out {
 		assert (this.next() is null);
 	} body {
-		T[][] a;
+		// here the most common biggest is the binomial coefficient 9 choose 4
+		// since usually we'll be having a dim of 9 and searching for up to dim/2
+		// so we initialise to that value, as it covers most cases
+		T[][] a = new T[][126];
 		T[] tmp;
-		while ((tmp = this.next()) !is null)
-			a ~= tmp;
+		int i;
+		while ((tmp = this.next()) !is null) {
+			if (i >= a.length)
+				a.length = 2*a.length;
+			a[i++] = tmp;
+		}
+		a.length = i;
 		return a;
 	}
 
@@ -250,13 +292,19 @@ class Parter(T) {
 const real LN9;
 real log9(real x) { return log(x) / LN9; }
 
+char[] getRow(int i) {
+	if (rowNums)
+		return format("%d", i + 1);
+	else
+		return format("%s", ROWCHAR[i]);
+}
+
 const char[] ROWCHAR;
 static this() {
 	for (int i = 0; i < 26; ++i)
 		ROWCHAR ~= i + 'A';
 	for (int i = 0; i < 26; ++i)
 		ROWCHAR ~= i + 'a';
-	ROWCHAR ~= "\\?+/`'*^!@#$%&{}()=<>|,.-;:_ ";
 
 	LN9 = log(9);
 }
