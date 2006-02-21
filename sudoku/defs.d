@@ -67,7 +67,7 @@ class Cell {
 
 		int removed;
 
-		for (int i = 1; i <= dim; ++i) {
+		foreach (int i; candidates) {
 			if (only.hasCandidate(i))
 				continue;
 

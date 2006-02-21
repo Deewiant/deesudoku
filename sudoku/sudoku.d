@@ -9,7 +9,7 @@ private import
 	sudoku.output,
 	sudoku.solver;
 
-const char[] VERSION = "DeewiantSudoku 1.2.1 © Matti \"Deewiant\" Niemenmaa 2006.",
+const char[] VERSION = "DeewiantSudoku 1.2.2 © Matti \"Deewiant\" Niemenmaa 2006.",
              HELPMSG =
 "Usage: sudoku [OPTION]...
 Attempts to solve all Sudoku puzzles read from standard input.
@@ -197,6 +197,9 @@ int main(char[][] args) {
 
 				continue;
 			}
+			
+			if (number == 1)
+				initSolver();
 
 			if (explain) {
 				if (number > 1)

@@ -3,6 +3,14 @@
      \------------------------------/
 
 --------------------------------------------------------------------------------
+ 1.2.2        2006-02-21
+--------------------------------------------------------------------------------
+ - Internal: more messing about with the Hidden Subset code. Should be even
+             faster now, but it's still by far the slowest function of the
+             bunch.
+ - Internal: extremely minor optimisation in Cell.removeCandidatesExcept().
+
+--------------------------------------------------------------------------------
  1.2.1        2006-02-20
 --------------------------------------------------------------------------------
  - New option: --row-numbers.

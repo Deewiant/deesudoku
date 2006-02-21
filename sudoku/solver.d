@@ -78,9 +78,45 @@ void solve() {
 		printStats(statistics, iterations, time);
 }
 
+int[][][] parts;
+void initSolver() {
+	if (dim > 16) {
+		// would use too much memory - 134 217 520 bytes (128 Mib) for dim = 25
+		derr.writefln("Such a dimension would increase memory usage a lot.");
+		derr.writefln("Forgetting about hidden subsets...");
+		derr.flush();
+
+		foreach (int i, bool function() method; methods) {
+			if (method == &hiddenSubset) {
+				methods = methods[0..i] ~ methods[i+1..$];
+				break;
+			}
+		}
+	} else {
+		if (parts.length)
+			return;
+
+		int limit = dim/2;
+
+		parts = new int[][][limit-1];
+		int[] offsets = new int[dim];
+		for (int i = 0; i < dim; ++i)
+			offsets[i] = i;
+		for (int i = 2; i <= limit; ++i) {
+			auto p = new Parter!(int)(offsets, i);
+			int[][] part = p.all();
+			parts[i-2] = part;
+		}
+		// in parts[i] we have all the int[]s representing array indices
+		// into all partitions of size (i+2) in an array of size dim
+		// so parts[0][0] are the indices of the first possible partition of size 2
+		// and parts[0][$-1] are the indices of the last
+	}
+}
+
 private:
 
-const bool function()[] methods;
+bool function()[] methods;
 // statistics mostly use the names at http://www.simes.clara.co.uk/programs/sudokutechniques.htm
 ulong[char[]] statistics;
 
@@ -373,6 +409,9 @@ bool checkConstraints() {
 bool nakedSubset() {
 	const char[] name = "Naked subsets";
 	bool changed;
+	// http://www.setbb.com/phpbb/viewtopic.php?t=273&mforum=sudoku
+	// as to why dim/2
+	int limit = dim/2;
 
 	void generalFunction(Cell[] area, char[] str) {
 		foreach (int i, Cell cell; area) {
@@ -448,9 +487,7 @@ bool nakedSubset() {
 				}
 			}
 
-			// http://www.setbb.com/phpbb/viewtopic.php?t=273&mforum=sudoku
-			// as to why dim/2
-			if (candNumber > 1 && candNumber <= dim/2) {
+			if (candNumber > 1 && candNumber <= limit) {
 				Cell[] cells;
 				cells ~= cell;
 				recurse(cells);
@@ -501,6 +538,11 @@ bool hiddenSubset() {
 		for (int n = 2; n <= limit; ++n) {
 			Cell[][] found = each.dup;
 
+			// if I were smart this could be optimised
+			// so that we put into found only those Cell[]s which have 0 < i[val] <= n
+			// but then we'd need a different method of figuring out the candidates in
+			// question, below
+			// and I can't (be bothered to) think of a smart method of doing this
 			int upToNCands;
 			for (int val = 0; val < dim; ++val) {
 				if (i[val] <= n) {
@@ -515,13 +557,15 @@ bool hiddenSubset() {
 			// they couldn't be part of a subset of size n
 
 			// if there weren't enough Cells with up to n candidates no such
-			// hidden subset can exist
+			// hidden subset can exist - nor a bigger one, hence break
 			if (upToNCands < n)
 				break;
 
-			auto p = new Parter!(Cell[])(found, n);
-			Cell[][] subFound;
-			while ((subFound = p.next()) !is null) {
+			Cell[][] subFound = new Cell[][n];
+			foreach (int[] part; parts[n-2]) {
+				foreach (int i, int p; part)
+					subFound[i] = found[p];
+
 				// so what we have in subFound are n Cell[]s
 				// each of which are all the Cells in area for a certain candidate
 
@@ -627,7 +671,7 @@ bool ichthyology() {
 
 	// a fish can be at most of size dim/2
 	// since fish of n=a in rows is a fish of n=dim-a in cols
-	for (int n = 2; n <= dim/2; ++n) {
+	for (int n = 2, limit = dim/2; n <= limit; ++n) {
 		// rows first
 		for (int val = 1; val <= dim; ++val) {
 			Cell[][] found = new Cell[][dim];
