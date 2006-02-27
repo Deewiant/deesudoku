@@ -3,6 +3,19 @@
      \------------------------------/
 
 --------------------------------------------------------------------------------
+ 2.0.0        2006-02-27
+--------------------------------------------------------------------------------
+ - Milestone: will find a solution to any Sudoku which has at least one.
+ - New feature: guessing. Not done by default.
+ - New option: --allow-guessing.
+ - New option: --benchmark.
+ - Bug fix: modification of newlines in output.
+ - Internal: no need to check for candidate 0 in printCandidates(), as there can
+             be no such thing.
+ - Internal: Realised from the above that using 0 as empty might be smart, and
+             thus changed the constant NONE from -1 to 0.
+
+--------------------------------------------------------------------------------
  1.2.2        2006-02-21
 --------------------------------------------------------------------------------
  - Internal: more messing about with the Hidden Subset code. Should be even

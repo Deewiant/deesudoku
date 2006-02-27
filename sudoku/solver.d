@@ -8,21 +8,27 @@ private import
 	sudoku.defs,
 	sudoku.output;
 
-void solve() {
+// tentative is passed when the situation is a guess
+// similarly, the return value matters only when the situation is a guess
+bool solve(bool tentative = false) {
 	bool changed;
 	ulong iterations;
 	long time; // no see
+	TickCounter timer;
 
-	TickCounter timer = new TickCounter();
-	if (someStats) {
-		foreach (char[] s; statistics.keys)
-			statistics.remove(s);
-		timer.start();
+	if (!tentative) {
+		timer = new TickCounter();
+		if (someStats) {
+			foreach (char[] s; statistics.keys)
+				statistics.remove(s);
+			guessCount = correctGuessCount = 0;
+			timer.start();
+		}
+
+		updateCandidates();
+
+		done = false;
 	}
-
-	updateCandidates();
-
-	done = false;
 
 	do {
 		changed = false;
@@ -33,7 +39,9 @@ void solve() {
 		if (showCandidates)
 			printCandidates();
 
-		if (checkValidity && !valid()) {
+		if ((tentative || checkValidity) && !valid()) {
+			if (tentative)
+				return false;
 			dout.writefln("The Sudoku appears to be invalid.");
 			dout.writefln("Halting...");
 			break;
@@ -55,13 +63,17 @@ void solve() {
 			dout.flush();
 	} while (changed);
 
+	if (tentative)
+		return true;
+
 	if (someStats) {
 		timer.stop();
 		time = timer.milliseconds();
 	}
 
-	// if showGrid is on, it was already printed
-	if (!showGrid && !noGrid)
+	// if showGrid is on, it was already printed in the loop
+	// unless we were guessing
+	if (!noGrid && (!showGrid || guessCount > 0))
 		printGrid();
 
 	if (totalStats) {
@@ -69,16 +81,20 @@ void solve() {
 			totalStatistics[s] += n;
 		totalIterations += iterations;
 		totalTime       += time;
+		totalGuesses    += guessCount;
+		totalCorGuesses += correctGuessCount;
 
 		if (done)
 			++completed;
 	}
 
 	if (stats)
-		printStats(statistics, iterations, time);
+		printStats(statistics, iterations, time, guessCount, correctGuessCount);
+
+	return true;
 }
 
-int[][][] parts;
+private int[][][] parts; // private parts, har har
 void initSolver() {
 	if (dim > 16) {
 		// would use too much memory - 134 217 520 bytes (128 Mib) for dim = 25
@@ -112,6 +128,9 @@ void initSolver() {
 		// so parts[0][0] are the indices of the first possible partition of size 2
 		// and parts[0][$-1] are the indices of the last
 	}
+
+	if (guessing)
+		methods ~= &guess; // hope this never gets called...
 }
 
 private:
@@ -119,6 +138,8 @@ private:
 bool function()[] methods;
 // statistics mostly use the names at http://www.simes.clara.co.uk/programs/sudokutechniques.htm
 ulong[char[]] statistics;
+// are output a bit differently so need their own variables
+ulong guessCount, correctGuessCount;
 
 static this() {
 	// ordered according to their likelihood of being useful
@@ -1076,6 +1097,58 @@ bool xyzWing() {
 	return false;
 }
 
+bool guess() {
+	int[]   backupVals = new int  [grid.length];
+	int[][] backupCans = new int[][grid.length];
+	foreach (int j, Cell c; grid) {
+		backupVals[j] = c.val;
+		backupCans[j] = c.candidates.dup;
+	}
+
+	// check small numbers of candidates first - quite a noticeable optimisation
+	for (int cands = 2; cands <= dim; ++cands) {
+		foreach (int i, inout Cell cell; grid) {
+			if (cell.val != EMPTY || cell.candidates.length != cands)
+				continue;
+
+			foreach (int n; cell.candidates) {
+				cell.val = n;
+				cell.candidates.length = 0;
+				updateCandidatesAffectedBy(cell);
+
+				if (explain)
+					dout.writefln("Guessing %d at %s...", n, cell.toString);
+
+				if (someStats)
+					++guessCount;
+
+				if (solve(true)) {
+					if (someStats)
+						++correctGuessCount;
+
+					return true;
+				} else {
+					if (explain)
+						dout.writefln("Guessing %d at %s failed, so it cannot have that value.", n, cell.toString);
+
+					foreach (int j, Cell c; grid) {
+						c.val = backupVals[j];
+						c.candidates = backupCans[j].dup;
+					}
+
+					// can't use cell - it points to the old grid
+					grid[i].removeCandidates(n);
+					return true;
+				}
+			}
+		}
+	}
+
+	// we are this far only if there was a previous guess, under which we are guessing further
+	// otherwise this would indicate an invalid puzzle which would have been caught by valid() earlier
+	return false;
+}
+
 // utility
 //////////
 
@@ -1175,6 +1248,7 @@ bool solved() {
 // Dancing Links - thanks to Donald E. Knuth
 ////////////////
 
+// implementation pending...
 void dancingLinks() {
 	// rows    = number of digits * number of cells
 	// columns = number of rows * number of columns +

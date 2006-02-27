@@ -122,6 +122,9 @@ void printGrid() {
 			dout.writefln();
 		}
 	}
+
+	if (explain)
+		dout.writefln();
 }
 
 void printCandidates() {
@@ -130,7 +133,7 @@ void printCandidates() {
 		foreach (Cell c; row) {
 			dout.writef("|");
 			int found;
-			for (int i = 0; i <= dim; ++i) {
+			for (int i = 1; i <= dim; ++i) {
 				if (c.candidates.hasCandidate(i)) {
 					dout.writef(charWidth > 1 ? " %*d" : "%*d", charWidth, i);
 					++found;
@@ -146,7 +149,7 @@ void printCandidates() {
 	dout.writefln();
 }
 
-void printStats(ulong[char[]] theStats, ulong iters, long time, bool total = false) {
+void printStats(ulong[char[]] theStats, ulong iters, long time, ulong guesses, ulong cGuesses, bool total = false) {
 	// space out
 	if (!noGrid || (noGrid && number > 1))
 		dout.writefln();
@@ -189,6 +192,13 @@ void printStats(ulong[char[]] theStats, ulong iters, long time, bool total = fal
 
 	foreach (int i, char[] str; strs)
 		dout.writefln("\t%s: %*d", str, cast(int)(longest + toString(ns[i]).length - str.length), ns[i]);
+
+	if (guesses > 0) {
+		dout.writefln("\tAnd, unfortunately, %d guesses, %s correct.",
+			guesses,
+			guesses == cGuesses ? "all of which were" : format("of which %d %s", cGuesses, cGuesses == 1 ? "was" : "were")
+		);
+	}
 
 	if (total)
 		dout.writefln("\nSolved %d/%d Sudokus.", completed, number);

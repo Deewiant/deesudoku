@@ -10,25 +10,25 @@ private import
 const char[] EMPTIES  = "._0";
 const char[] NEWLINES = "+\n";
 
-
 package:
 
-
-const int NONE = -1;
+const int NONE = 0;
 alias NONE EMPTY;
 
 Cell[] grid;
 Cell[][] rows, cols, boxes;
 
 // behaviour
-bit checkValidity,
-    someStats,
-    noSolve,
-    rowNums;
+bool checkValidity,
+     someStats,
+     noSolve,
+     rowNums,
+     guessing;
 int dim = 9;
 
 ulong[char[]] totalStatistics;
-ulong         totalIterations;
+ulong         totalIterations,
+              totalGuesses, totalCorGuesses;
 long          totalTime;
 ulong         completed, number;
 

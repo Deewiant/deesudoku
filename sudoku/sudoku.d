@@ -9,7 +9,7 @@ private import
 	sudoku.output,
 	sudoku.solver;
 
-const char[] VERSION = "DeewiantSudoku 1.2.2 © Matti \"Deewiant\" Niemenmaa 2006.",
+const char[] VERSION = "DeewiantSudoku 2.0.0 © Matti \"Deewiant\" Niemenmaa 2006.",
              HELPMSG =
 "Usage: sudoku [OPTION]...
 Attempts to solve all Sudoku puzzles read from standard input.
@@ -43,7 +43,9 @@ Verbosity:
 
 Behaviour:
   -cv,   --check-validity    Check validity on every iteration; skip if invalid.
-  -ns,   --no-solve          Do not solve puzzles; only output initial state.",
+  -ns,   --no-solve          Do not solve puzzles; only output initial state.
+  -ag,   --allow-guessing    Allow guessing to be utilised when solving.
+  -b,    --benchmark         Equivalent to -ts -ag -ng.",
              EXAMPLES =
 ".....319..1.87...43.7.615..7.9..5..6.........6..1..7.2..854.6.11...38.4..947.....
 5_26__7__+___9___1_+______385+__4_961__+_________+__527_9__+837______+_6___9___+__9__82_3
@@ -122,6 +124,12 @@ int main(char[][] args) {
 			case "--row-numbers", "-rn":
 				rowNums = true;
 				break;
+			case "--benchmark", "-b":
+				totalStats = true;
+				noGrid     = true;
+			case "--allow-guessing", "-ag":
+				guessing = true;
+				break;
 			default:
 				derr.writefln("Unrecognised argument ", arg);
 				break;
@@ -178,7 +186,6 @@ int main(char[][] args) {
 		derr.writefln("Invalid dimension: the dimension must be a square number.");
 		return 42;
 	}
-
 	prettyPrintInterval = sqrtDim;
 
 	int errorLevel = 0;
@@ -197,14 +204,16 @@ int main(char[][] args) {
 
 				continue;
 			}
-			
+
 			if (number == 1)
 				initSolver();
 
 			if (explain) {
 				if (number > 1)
 					dout.writefln();
-				dout.writefln("--- Starting a new 数独 puzzle... ---\n");
+				dout.writefln("--- Starting a new 数独 puzzle... ---");
+				if (!showGrid)
+					dout.writefln();
 				dout.flush();
 			}
 
@@ -216,7 +225,7 @@ int main(char[][] args) {
 	}
 
 	if (totalStats)
-		printStats(totalStatistics, totalIterations, totalTime, true);
+		printStats(totalStatistics, totalIterations, totalTime, totalGuesses, totalCorGuesses, true);
 
 	return errorLevel;
 }
