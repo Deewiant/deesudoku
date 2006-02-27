@@ -194,9 +194,14 @@ void printStats(ulong[char[]] theStats, ulong iters, long time, ulong guesses, u
 		dout.writefln("\t%s: %*d", str, cast(int)(longest + toString(ns[i]).length - str.length), ns[i]);
 
 	if (guesses > 0) {
-		dout.writefln("\tAnd, unfortunately, %d guesses, %s correct.",
+		dout.writefln("\tAnd, unfortunately, %d guess%s, %s correct.",
 			guesses,
-			guesses == cGuesses ? "all of which were" : format("of which %d %s", cGuesses, cGuesses == 1 ? "was" : "were")
+			guesses == 1 ? "" : "es",
+			guesses == cGuesses
+				? guesses == 1
+					? "which was luckily"
+					: "all of which were"
+				: format("of which %d %s", cGuesses, cGuesses == 1 ? "was" : "were")
 		);
 	}
 
