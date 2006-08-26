@@ -50,13 +50,10 @@ void printGrid() {
 		if (charWidth > 1)
 			dout.writef("!%d!", charWidth);
 		foreach (int i, Cell c; grid) {
-			/+if (dim != 9 && i > 0 && i % dim == 0)
-				dout.writef('+');+/
-
 			if (c.val == EMPTY)
-				dout.writef(spread('.'));
+				dout.writef('.');
 			else
-				dout.writef(charWidth > 1 ? " %*d" : "%*d", charWidth, c.val);
+				dout.writef("%*d", charWidth, c.val);
 		}
 		if (explain || someStats)
 			dout.writefln();
@@ -125,6 +122,8 @@ void printGrid() {
 
 	if (explain)
 		dout.writefln();
+	
+	dout.flush();
 }
 
 void printCandidates() {
@@ -147,6 +146,7 @@ void printCandidates() {
 		dout.writefln("|");
 	}
 	dout.writefln();
+	dout.flush();
 }
 
 void printStats(ulong[char[]] theStats, ulong iters, long time, ulong guesses, ulong cGuesses, bool total = false) {
@@ -194,19 +194,25 @@ void printStats(ulong[char[]] theStats, ulong iters, long time, ulong guesses, u
 		dout.writefln("\t%s: %*d", str, cast(int)(longest + toString(ns[i]).length - str.length), ns[i]);
 
 	if (guesses > 0) {
-		dout.writefln("\tAnd, unfortunately, %d guess%s, %s correct.",
+		dout.writefln("\tAnd, unfortunately, %d guess%s, %scorrect.",
 			guesses,
 			guesses == 1 ? "" : "es",
-			guesses == cGuesses
+			cGuesses == 0
 				? guesses == 1
-					? "which was luckily"
-					: "all of which were"
-				: format("of which %d %s", cGuesses, cGuesses == 1 ? "was" : "were")
+					? "which was unluckily in"
+					: "none of which were "
+				: guesses == cGuesses
+					? guesses == 1
+						? "which was luckily "
+						: "all of which were "
+					: format("of which %d %s ", cGuesses, cGuesses == 1 ? "was" : "were")
 		);
 	}
 
 	if (total)
 		dout.writefln("\nSolved %d/%d Sudokus.", completed, number);
+	else
+		dout.flush(); // no need to flush if total, since it's the last thing anyway
 }
 
 char[] nCandidates(int n, char[] str = null) {

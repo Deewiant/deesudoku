@@ -9,7 +9,7 @@ private import
 	sudoku.output,
 	sudoku.solver;
 
-const char[] VERSION = "DeewiantSudoku 2.0.0 © Matti \"Deewiant\" Niemenmaa 2006.",
+const char[] VERSION = "DeewiantSudoku 2.0.2 © Matti \"Deewiant\" Niemenmaa 2006.",
              HELPMSG =
 "Usage: sudoku [OPTION]...
 Attempts to solve all Sudoku puzzles read from standard input.
@@ -45,7 +45,8 @@ Behaviour:
   -cv,   --check-validity    Check validity on every iteration; skip if invalid.
   -ns,   --no-solve          Do not solve puzzles; only output initial state.
   -ag,   --allow-guessing    Allow guessing to be utilised when solving.
-  -b,    --benchmark         Equivalent to -ts -ag -ng.",
+  -b,    --benchmark         Equivalent to -ts -ag -ng.
+  -fn,   --force-naked       Always find naked instead of hidden subsets.",
              EXAMPLES =
 ".....319..1.87...43.7.615..7.9..5..6.........6..1..7.2..854.6.11...38.4..947.....
 5_26__7__+___9___1_+______385+__4_961__+_________+__527_9__+837______+_6___9___+__9__82_3
@@ -68,14 +69,15 @@ Behaviour:
 0 0 0 0 0 0 0 9 0
 0 0 0 3 7 0 0 0 0
 0 9 0 0 0 0 8 0 0
-0 8 0 0 0 0 0 6 0";
+0 8 0 0 0 0 0 6 0
+69...2..........31...........314....2.....6.....3........71..4.86....5...........";
 
 int main(char[][] args) {
 	try foreach (char[] arg; args[1..$]) {
-		if (arg.length > 2 && arg[0..2] == "-d")
-			dim = toInt(arg[2..$]);
-		else if (arg.length > 3 && arg[0..3] == "-d=")
+		if (arg.length > 3 && arg[0..3] == "-d=")
 			dim = toInt(arg[3..$]);
+		else if (arg.length > 2 && arg[0..2] == "-d")
+			dim = toInt(arg[2..$]);
 		else if (arg.length > 6 && arg[0..6] == "--dim=")
 			dim = toInt(arg[6..$]);
 		else switch (arg) {
@@ -129,6 +131,9 @@ int main(char[][] args) {
 				noGrid     = true;
 			case "--allow-guessing", "-ag":
 				guessing = true;
+				break;
+			case "--force-naked", "-fn":
+				forceNaked = true;
 				break;
 			default:
 				derr.writefln("Unrecognised argument ", arg);
@@ -188,6 +193,9 @@ int main(char[][] args) {
 	}
 	prettyPrintInterval = sqrtDim;
 
+	if (dim > 9)
+		forceNaked = true;
+
 	int errorLevel = 0;
 	while (!din.eof) {
 		if (load(sqrtDim)) {
@@ -205,7 +213,7 @@ int main(char[][] args) {
 				continue;
 			}
 
-			if (number == 1)
+			if (number == 1) // no need to init if none was ever loaded
 				initSolver();
 
 			if (explain) {
@@ -256,7 +264,7 @@ int load(int sqrtDim) {
 	// lastG is to ignore lines that contain no cells
 	int g, lastG, row, col, box;
 
-	bit terseMode;
+	bool terseMode;
 	int terseWidth;
 
 	// how many chars one cell takes
@@ -320,21 +328,26 @@ int load(int sqrtDim) {
 
 			add(cell);
 
-		} else if (std.string.digits.contains(ch)) {
+		} else if (std.string.digits.contains(ch) || (terseMode && ch == ' ')) {
 			char tmp;
 			char[] str;
-			str ~= ch;
 			if (terseMode) {
+				if (ch != ' ')
+					str ~= ch;
+
 				int i = terseWidth;
 				while (--i) {
 					tmp = din.getc();
 					str ~= tmp;
 				}
-			} else if (cellWidth > 1) {
-				while (std.string.digits.contains(tmp = din.getc()))
-					str ~= tmp;
+				str = stripr(str);
+			} else {
+				str ~= ch;
+				if (cellWidth > 1)
+					while (std.string.digits.contains(tmp = din.getc()))
+						str ~= tmp;
+				din.ungetc(tmp);
 			}
-			din.ungetc(tmp);
 
 			cell.val = toUint(str);
 
@@ -345,7 +358,7 @@ int load(int sqrtDim) {
 			col = 0;
 			lastG = g;
 		}
-	} catch (Exception e) {
+	} catch {
 		derr.writefln("Failed to load a Sudoku.\n\nPossible causes:");
 		derr.writefln("\t- Excess characters within the Sudoku: make sure comments are on lines\n\t  starting with #!");
 		derr.writefln("\t- Wrong character types: all of \"%s\" are considered empty cells, and\n\t  only numbers can be used as cell values.", EMPTIES);

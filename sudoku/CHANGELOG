@@ -3,6 +3,28 @@
      \------------------------------/
 
 --------------------------------------------------------------------------------
+ 2.1.0        2006-03-02
+--------------------------------------------------------------------------------
+ - New example.
+ - Bug fix: an incorrect plural in "1 guess, of which 0 were correct".
+ - Bug fix: forgot to change version number with 2.0.1.
+ - Bug fix: the "-d=N" way of specifying a custom dimension had probably not
+            worked since before 1.0.0.
+ - Bug fix: terse output and input was fairly screwed up for higher dimensions.
+ - Bug fix: ichthyology explanations used rows when meaning columns, and vice
+            versa.
+ - Bug fix: flushing output streams only when it's necessary now.
+ - Change: added the asterisk and comma as possible "empty" tokens.
+ - Change: forgetting about hidden subsets already for any dimension > 9: the
+           code is just too slow even for 16*16 Sudokus - and, to be honest,
+           for 9*9 as well, but not unbearably so.
+ - New option: --force-naked.
+ - Internal: removed the module constructor in solver.d, moving the method
+             initialisation to initSolver().
+ - Internal: changed "catch (Exception e)" to just "catch" in the load()
+             function.
+ 
+--------------------------------------------------------------------------------
  2.0.1        2006-02-27
 --------------------------------------------------------------------------------
  - Bug fix: two incorrect plurals in "1 guesses, all of which were correct".

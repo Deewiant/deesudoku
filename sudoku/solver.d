@@ -44,23 +44,25 @@ bool solve(bool tentative = false) {
 				return false;
 			dout.writefln("The Sudoku appears to be invalid.");
 			dout.writefln("Halting...");
+			dout.flush();
 			break;
 		}
 
 		if (someStats)
 			++iterations;
 
-		foreach (bool function() method; methods)
-			if (changed = method(), changed)
+		foreach (bool function() method; methods) {
+			if (changed = method(), changed) {
+				if (explain)
+					dout.flush();
 				break;
+			}
+		}
 
 		if (solved()) {
 			done = true;
 			break;
 		}
-
-		if (!noGrid || explain || stats || checkValidity)
-			dout.flush();
 	} while (changed);
 
 	if (tentative)
@@ -96,19 +98,27 @@ bool solve(bool tentative = false) {
 
 private int[][][] parts; // private parts, har har
 void initSolver() {
-	if (dim > 16) {
-		// would use too much memory - 134 217 520 bytes (128 Mib) for dim = 25
-		derr.writefln("Such a dimension would increase memory usage a lot.");
-		derr.writefln("Forgetting about hidden subsets...");
-		derr.flush();
+	// ordered according to their likelihood of being useful
+	// this increases speed (reduces iterations) somewhat
+	// ichthyology is older than both xyWing and xyzWing
+	methods ~= &expandSingleCandidates;
+	methods ~= &assignUniques;
+	methods ~= &checkConstraints;
+	methods ~= &nakedSubset;
 
-		foreach (int i, bool function() method; methods) {
-			if (method == &hiddenSubset) {
-				methods = methods[0..i] ~ methods[i+1..$];
-				break;
-			}
+	// forceNaked is set already if dim > 9
+	if (forceNaked) {
+		if (dim > 9) {
+			derr.writefln("Forgetting about hidden subsets since dim>9 and my code is so damn SLOW...");
+			derr.flush();
 		}
+		nakedLimit = dim-2; // not sure about the actual maximum, but at least this isn't too little
 	} else {
+		methods ~= &hiddenSubset;
+
+		// http://www.setbb.com/phpbb/viewtopic.php?t=273&mforum=sudoku
+		nakedLimit = dim/2;
+
 		if (parts.length)
 			return;
 
@@ -129,6 +139,10 @@ void initSolver() {
 		// and parts[0][$-1] are the indices of the last
 	}
 
+	methods ~= &xyWing;
+	methods	~= &xyzWing;
+	methods ~= &ichthyology;
+
 	if (guessing)
 		methods ~= &guess; // hope this never gets called...
 }
@@ -136,25 +150,11 @@ void initSolver() {
 private:
 
 bool function()[] methods;
+
 // statistics mostly use the names at http://www.simes.clara.co.uk/programs/sudokutechniques.htm
 ulong[char[]] statistics;
 // are output a bit differently so need their own variables
 ulong guessCount, correctGuessCount;
-
-static this() {
-	// ordered according to their likelihood of being useful
-	// this increases speed (reduces iterations) somewhat
-
-	// ichthyology implemented before XY-wing but the latter is more common
-	methods ~= &expandSingleCandidates;
-	methods ~= &assignUniques;
-	methods ~= &checkConstraints;
-	methods ~= &nakedSubset;
-	methods ~= &hiddenSubset;
-	methods ~= &xyzWing;
-	methods ~= &xyWing;
-	methods ~= &ichthyology;
-}
 
 // solving
 //////////
@@ -186,7 +186,6 @@ bool expandSingleCandidates() {
 // if a candidate is in only one cell of a row/column/block, it must be where it is
 bool assignUniques() {
 	const char[] name = "Hidden singles";
-	bool changed;
 
 	foreach (Cell[] row; rows) {
 		int[int] canCount, // key is candidate value, value is number of such candidates
@@ -252,7 +251,7 @@ bool assignUniques() {
 				if (someStats)
 					++statistics[name];
 
-				changed = true;
+				return true;
 			}
 		}
 	}
@@ -273,7 +272,6 @@ bool assignUniques() {
 				Cell c = box[position[i]];
 				c.val = i;
 				c.candidates.length = 0;
-				changed = true;
 
 				if (explain) {
 					dout.writefln("Cell %s is the only one in box at %s to have the candidate %d.",
@@ -287,12 +285,12 @@ bool assignUniques() {
 				if (someStats)
 					++statistics[name];
 
-				changed = true;
+				return true;
 			}
 		}
 	}
 
-	return changed;
+	return false;
 }
 
 // check each row/column for candidates that occur only in a specific box
@@ -427,12 +425,10 @@ bool checkConstraints() {
 
 // if n cells in the same row/column/block have altogether only n different candidates,
 // can remove those candidates from the others in that row/column/block
+int nakedLimit;
 bool nakedSubset() {
 	const char[] name = "Naked subsets";
 	bool changed;
-	// http://www.setbb.com/phpbb/viewtopic.php?t=273&mforum=sudoku
-	// as to why dim/2
-	int limit = dim/2;
 
 	void generalFunction(Cell[] area, char[] str) {
 		foreach (int i, Cell cell; area) {
@@ -508,7 +504,7 @@ bool nakedSubset() {
 				}
 			}
 
-			if (candNumber > 1 && candNumber <= limit) {
+			if (candNumber > 1 && candNumber <= nakedLimit) {
 				Cell[] cells;
 				cells ~= cell;
 				recurse(cells);
@@ -537,6 +533,10 @@ bool nakedSubset() {
 // If there are N cells with N candidates between them that don't appear
 // elsewhere in the same row, column or block, then any other candidates
 // for those cells can be eliminated.
+
+// LEGIBLISH RECURSIVE CODE, BIT TRICKY DUE TO BIT MATH BUT SHOULD BE OK IF YOU THINK ABOUT IT
+// http://www.setbb.com/sudoku/viewtopic.php?t=597&highlight=subset&mforum=sudoku
+
 bool hiddenSubset() {
 	const char[] name = "Hidden subsets";
 
@@ -746,18 +746,13 @@ bool ichthyology() {
 				// if got this far, can remove the candidates for val from all seen cols
 				// except from those cells whose row was found - they're the intersection points
 				int removed;
-				char[] rowList;
-				bool[int] listedRows;
+				char[] colList;
 
 				foreach (int i; seenCols.keys) {
+					if (explain)
+						colList ~= format("%d, ", i + 1);
 					foreach (Cell c; cols[i]) {
-						if (c.row in foundRows) {
-							if (!(c.row in listedRows)) {
-								if (explain)
-									rowList ~= format("%s, ", getRow(c.row));
-								listedRows[c.row] = true;
-							}
-						} else
+						if (!(c.row in foundRows))
 							removed += c.removeCandidates(val);
 					}
 				}
@@ -782,8 +777,8 @@ bool ichthyology() {
 						);
 
 						dout.writefln(
-							"eliminated %s for %d in rows %s.",
-							nCandidates(removed), val, rowList[0..$-2]
+							"eliminated %s for %d in columns %s.",
+							nCandidates(removed), val, colList[0..$-2]
 						);
 					}
 
@@ -842,16 +837,12 @@ bool ichthyology() {
 					continue;
 
 				int removed;
-				char[] colList;
-				bool[int] listedCols;
+				char[] rowList;
 				foreach (int i; seenRows.keys) {
+					if (explain)
+						rowList ~= format("%s, ", getRow(i));
 					foreach (Cell c; rows[i]) {
-						if (c.col in foundCols) {
-							if (!(c.col in listedCols)) {
-								colList  ~= format("%d, ", c.col+1);
-								listedCols[c.col] = true;
-							}
-						} else
+						if (!(c.col in foundCols))
 							removed += c.removeCandidates(val);
 					}
 				}
@@ -876,8 +867,8 @@ bool ichthyology() {
 						);
 
 						dout.writefln(
-							"eliminated %s for %d in columns %s.",
-							nCandidates(removed), val, colList[0..$-2]
+							"eliminated %s for %d in rows %s.",
+							nCandidates(removed), val, rowList[0..$-2]
 						);
 					}
 
@@ -1053,7 +1044,7 @@ bool xyzWing() {
 				if (YZ.candidates == XZ.candidates)
 					continue;
 
-				// so it's an YZ
+				// so it's a YZ
 				// but what's the Z?
 				// it must be in shared[i] as well as in YZ
 				// and there can be only one such one, or the above if would've been true
@@ -1106,40 +1097,39 @@ bool guess() {
 	}
 
 	// check small numbers of candidates first - quite a noticeable optimisation
-	for (int cands = 2; cands <= dim; ++cands) {
-		foreach (int i, inout Cell cell; grid) {
-			if (cell.val != EMPTY || cell.candidates.length != cands)
-				continue;
+	for (int cands = 2; cands <= dim; ++cands) foreach (int i, inout Cell cell; grid) {
 
-			foreach (int n; cell.candidates) {
-				cell.val = n;
-				cell.candidates.length = 0;
-				updateCandidatesAffectedBy(cell);
+		if (cell.val != EMPTY || cell.candidates.length != cands)
+			continue;
 
-				if (explain)
-					dout.writefln("Guessing %d at %s...", n, cell.toString);
+		foreach (int n; cell.candidates) {
+			cell.val = n;
+			cell.candidates.length = 0;
+			updateCandidatesAffectedBy(cell);
 
+			if (explain)
+				dout.writefln("Guessing %d at %s...", n, cell.toString);
+
+			if (someStats)
+				++guessCount;
+
+			if (solve(true)) {
 				if (someStats)
-					++guessCount;
+					++correctGuessCount;
 
-				if (solve(true)) {
-					if (someStats)
-						++correctGuessCount;
+				return true;
+			} else {
+				if (explain)
+					dout.writefln("Guessing %d at %s failed, so it cannot have that value.", n, cell.toString);
 
-					return true;
-				} else {
-					if (explain)
-						dout.writefln("Guessing %d at %s failed, so it cannot have that value.", n, cell.toString);
-
-					foreach (int j, Cell c; grid) {
-						c.val = backupVals[j];
-						c.candidates = backupCans[j].dup;
-					}
-
-					// can't use cell - it points to the old grid
-					grid[i].removeCandidates(n);
-					return true;
+				foreach (int j, Cell c; grid) {
+					c.val = backupVals[j];
+					c.candidates = backupCans[j].dup;
 				}
+
+				// can't use cell - it points to the old grid
+				grid[i].removeCandidates(n);
+				return true;
 			}
 		}
 	}

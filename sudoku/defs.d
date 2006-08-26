@@ -7,7 +7,7 @@ private import
 	std.math,
 	std.string;
 
-const char[] EMPTIES  = "._0";
+const char[] EMPTIES  = "._0*,";
 const char[] NEWLINES = "+\n";
 
 package:
@@ -23,7 +23,8 @@ bool checkValidity,
      someStats,
      noSolve,
      rowNums,
-     guessing;
+     guessing,
+     forceNaked;
 int dim = 9;
 
 ulong[char[]] totalStatistics;
