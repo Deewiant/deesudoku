@@ -1,0 +1,7 @@
+deesudoku
+-O
+-inline
+-release
+-full
+-odobj
+-I..
