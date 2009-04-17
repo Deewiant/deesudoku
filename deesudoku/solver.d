@@ -3,7 +3,10 @@ module deesudoku.solver;
 import std.bitarray;
 //import std.cstream : dout;
 import std.math : sqrt;
-import std.perf : TickCounter;
+version (Posix)
+	import std.perf : TickCounter = PerformanceCounter;
+else
+	import std.perf : TickCounter;
 import std.string : toString;
 import
 	deesudoku.defs,
